@@ -1,3 +1,6 @@
+The End-to-End (E2E) Test Framework (ETFTF) is a framework for testing the Drasi platform. It provides a set of tools and utilities to create, manage, and execute end-to-end tests for Drasi applications. The framework is designed to be flexible and extensible, allowing developers to customize their test configurations and workflows. It is built with the following use cases in mind:
+- Performance testing through running predefined high volume tests against Drasi environments with different 
+
 # Running the Examples
 The E2E Test Framework (ETF) includes examples in the ```examples``` folder that show how to use it:
 
