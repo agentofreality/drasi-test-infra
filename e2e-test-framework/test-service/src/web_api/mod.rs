@@ -24,6 +24,7 @@ use axum::{
 use serde::Serialize;
 use thiserror::Error;
 use tokio::{select, signal};
+use utoipa::{OpenApi, ToSchema};
 
 use data_collector::DataCollector;
 use queries::get_queries_routes;
@@ -31,10 +32,13 @@ use repo::get_test_repo_routes;
 use sources::get_sources_routes;
 use test_data_store::TestDataStore;
 use test_run_host::TestRunHost;
+use utoipa_swagger_ui::SwaggerUi;
 
-mod queries;
-mod repo;
-mod sources;
+use crate::openapi::ApiDoc;
+
+pub mod queries;
+pub mod repo;
+pub mod sources;
 
 #[derive(Debug, Error)]
 pub enum TestServiceWebApiError {
@@ -97,29 +101,67 @@ impl IntoResponse for TestServiceWebApiError {
     }
 }
 
-#[derive(Debug, Serialize)]
-struct TestServiceStateResponse {
+#[derive(Debug, Serialize, ToSchema)]
+#[schema(example = json!({
+    "data_collector": {
+        "status": "Running",
+        "data_collection_ids": ["collection-1", "collection-2"]
+    },
+    "data_store": {
+        "path": "/data/test-data-store",
+        "test_repo_ids": ["repo-1", "repo-2"]
+    },
+    "test_run_host": {
+        "status": "Active",
+        "test_run_query_ids": ["query-1", "query-2"],
+        "test_run_source_ids": ["source-1", "source-2"]
+    }
+}))]
+pub struct TestServiceStateResponse {
+    /// Data collector state information
     pub data_collector: DataCollectorStateResponse,
+    /// Test data store state information
     pub data_store: TestDataStoreStateResponse,
+    /// Test run host state information
     pub test_run_host: TestRunHostStateResponse,
 }
 
-#[derive(Debug, Serialize)]
-struct TestDataStoreStateResponse {
+#[derive(Debug, Serialize, ToSchema)]
+#[schema(example = json!({
+    "path": "/data/test-data-store",
+    "test_repo_ids": ["population-test", "performance-test"]
+}))]
+pub struct TestDataStoreStateResponse {
+    /// File system path where test data is stored
     pub path: String,
+    /// List of available test repository IDs
     pub test_repo_ids: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
-struct TestRunHostStateResponse {
+#[derive(Debug, Serialize, ToSchema)]
+#[schema(example = json!({
+    "status": "Active",
+    "test_run_query_ids": ["query-1", "query-2"],
+    "test_run_source_ids": ["source-1", "source-2"]
+}))]
+pub struct TestRunHostStateResponse {
+    /// Current status of the test run host
     pub status: String,
+    /// List of active test run query IDs
     pub test_run_query_ids: Vec<String>,
+    /// List of active test run source IDs
     pub test_run_source_ids: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
-struct DataCollectorStateResponse {
+#[derive(Debug, Serialize, ToSchema)]
+#[schema(example = json!({
+    "status": "Running",
+    "data_collection_ids": ["collection-123", "collection-456"]
+}))]
+pub struct DataCollectorStateResponse {
+    /// Current status of the data collector
     pub status: String,
+    /// List of active data collection IDs
     pub data_collection_ids: Vec<String>,
 }
 
@@ -131,16 +173,23 @@ pub(crate) async fn start_web_api(
 ) {
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
 
-    let app = Router::new()
+    // Create the main API router
+    let api_router = Router::new()
         .route("/", get(get_service_info_handler))
         .nest("/test_repos", get_test_repo_routes())
         .nest("/test_run_host", get_queries_routes())
-        .nest("/test_run_host", get_sources_routes())
+        .nest("/test_run_host", get_sources_routes());
+
+    // Create the complete application with Swagger UI
+    let app = api_router
+        .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .layer(axum::extract::Extension(data_collector))
         .layer(axum::extract::Extension(test_data_store))
         .layer(axum::extract::Extension(test_run_host));
 
     log::info!("Test Service Web API listening on http://{}", addr);
+    log::info!("API Documentation available at http://{}/docs", addr);
+    log::info!("OpenAPI JSON specification available at http://{}/api-docs/openapi.json", addr);
 
     let server = axum::Server::bind(&addr).serve(app.into_make_service());
 
@@ -187,6 +236,15 @@ async fn shutdown_signal() {
     log::info!("Resources cleaned up.");
 }
 
+#[utoipa::path(
+    get,
+    path = "/",
+    tag = "service",
+    responses(
+        (status = 200, description = "Service information retrieved successfully", body = TestServiceStateResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 async fn get_service_info_handler(
     data_collector: Extension<Arc<DataCollector>>,
     test_data_store: Extension<Arc<TestDataStore>>,

@@ -49,6 +49,15 @@ pub fn get_queries_routes() -> Router {
         .route("/queries/:id/stop", post(query_observer_stop_handler))
 }
 
+#[utoipa::path(
+    get,
+    path = "/test_run_host/queries",
+    tag = "queries",
+    responses(
+        (status = 200, description = "List of query IDs", body = Vec<String>),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn get_query_list_handler(
     test_run_host: Extension<Arc<TestRunHost>>,
 ) -> anyhow::Result<impl IntoResponse, TestServiceWebApiError> {
@@ -63,6 +72,19 @@ pub async fn get_query_list_handler(
     Ok(Json(queries).into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/test_run_host/queries/{id}",
+    tag = "queries",
+    params(
+        ("id" = String, Path, description = "Query identifier")
+    ),
+    responses(
+        (status = 200, description = "Query state information", body = QueryStateResponse),
+        (status = 404, description = "Query not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn get_query_handler(
     Path(id): Path<String>,
     test_run_host: Extension<Arc<TestRunHost>>,
@@ -80,6 +102,20 @@ pub async fn get_query_handler(
 
 const IMAGE_EXTENSIONS: &[&str] = &["jpg", "jpeg", "png", "gif", "bmp", "webp"];
 
+#[utoipa::path(
+    get,
+    path = "/test_run_host/queries/{id}/profile",
+    tag = "queries",
+    params(
+        ("id" = String, Path, description = "Query identifier")
+    ),
+    responses(
+        (status = 200, description = "Query result profile HTML", content_type = "text/html"),
+        (status = 404, description = "Query not found", body = ErrorResponse),
+        (status = 503, description = "Query not finished", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn get_query_result_profile_handler(
     Path(id): Path<String>,
     test_run_host: Extension<Arc<TestRunHost>>,
@@ -185,6 +221,19 @@ pub async fn get_query_result_profile_handler(
         .into_response())
 }
 
+#[utoipa::path(
+    post,
+    path = "/test_run_host/queries/{id}/pause",
+    tag = "queries",
+    params(
+        ("id" = String, Path, description = "Query identifier")
+    ),
+    responses(
+        (status = 200, description = "Query paused successfully", body = QueryObserverState),
+        (status = 404, description = "Query not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn query_observer_pause_handler(
     Path(id): Path<String>,
     test_run_host: Extension<Arc<TestRunHost>>,
@@ -203,6 +252,19 @@ pub async fn query_observer_pause_handler(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/test_run_host/queries/{id}/reset",
+    tag = "queries",
+    params(
+        ("id" = String, Path, description = "Query identifier")
+    ),
+    responses(
+        (status = 200, description = "Query reset successfully", body = QueryObserverState),
+        (status = 404, description = "Query not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn query_observer_reset_handler(
     Path(id): Path<String>,
     test_run_host: Extension<Arc<TestRunHost>>,
@@ -221,6 +283,19 @@ pub async fn query_observer_reset_handler(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/test_run_host/queries/{id}/start",
+    tag = "queries",
+    params(
+        ("id" = String, Path, description = "Query identifier")
+    ),
+    responses(
+        (status = 200, description = "Query started successfully", body = QueryObserverState),
+        (status = 404, description = "Query not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn query_observer_start_handler(
     Path(id): Path<String>,
     test_run_host: Extension<Arc<TestRunHost>>,
@@ -239,6 +314,19 @@ pub async fn query_observer_start_handler(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/test_run_host/queries/{id}/stop",
+    tag = "queries",
+    params(
+        ("id" = String, Path, description = "Query identifier")
+    ),
+    responses(
+        (status = 200, description = "Query stopped successfully", body = QueryObserverState),
+        (status = 404, description = "Query not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn query_observer_stop_handler(
     Path(id): Path<String>,
     test_run_host: Extension<Arc<TestRunHost>>,
@@ -257,6 +345,17 @@ pub async fn query_observer_stop_handler(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/test_run_host/queries",
+    tag = "queries",
+    request_body = test_run_host::queries::TestRunQueryConfig,
+    responses(
+        (status = 200, description = "Query created successfully", body = QueryStateResponse),
+        (status = 400, description = "Invalid request body", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn post_query_handler(
     test_run_host: Extension<Arc<TestRunHost>>,
     body: Json<TestRunQueryConfig>,

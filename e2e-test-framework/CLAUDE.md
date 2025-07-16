@@ -1,0 +1,123 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+This is the Drasi E2E Test Framework - a Rust-based testing infrastructure for validating Drasi's reactive graph intelligence platform. The framework simulates data sources, dispatches change events, and monitors query results.
+
+## Key Commands
+
+### Building
+```bash
+# Build all Docker images
+make
+
+# Build with specific options
+make DOCKERX_OPTS="--platform linux/amd64,linux/arm64"
+
+# Push to local Kind cluster
+make kind-load
+
+# Deploy to Drasi as SourceProvider
+make drasi-apply
+```
+
+### Development
+```bash
+# Run the test service locally
+cargo run -p test-service
+
+# Run all tests
+cargo test
+
+# Run tests for a specific package
+cargo test -p test-service
+
+# Run a specific test
+cargo test test_name
+
+# Lint check (format + clippy)
+make lint-check
+
+# Auto-fix lint issues
+cargo fmt
+cargo clippy --fix
+```
+
+### Running Examples
+```bash
+# Local population example
+./examples/population/run_local
+
+# Drasi population example (requires Kind cluster)
+./examples/population/run_kind_drasi
+```
+
+## Architecture
+
+The project is a Rust workspace with these main components:
+
+- **test-service**: REST API for managing test runs (port 8080, `/docs` for OpenAPI)
+- **test-run-host**: Core test execution engine that orchestrates sources and queries
+- **data-collector**: Records test data from external systems
+- **proxy**: Routes test traffic between components
+- **reactivator**: Reactivates test scenarios for replay
+- **test-data-store**: Storage layer supporting Local, Azure Blob, and GitHub backends
+- **infrastructure**: Dapr-based messaging abstractions
+
+## Key Concepts
+
+### Test Repository
+- Contains bootstrap data and change scripts
+- Supports multiple storage backends (Local filesystem, Azure Blob, GitHub)
+- JSON-based configuration files
+
+### Test Sources
+- Simulate data sources by replaying recorded changes
+- Support multiple timing modes: recorded, rebased, live
+- Can generate change events with configurable spacing
+
+### Test Queries
+- Monitor query results through Redis streams
+- Built-in profiling and performance metrics
+- Support for various output formats
+
+### Change Dispatchers
+- Console: Logs to stdout
+- Dapr: Publishes via Dapr pubsub
+- Redis: Publishes to Redis streams
+- File: Writes to local files
+
+## API Endpoints
+
+Main REST API endpoints (test-service):
+- `/api/repos` - Manage test repositories
+- `/api/sources` - Configure test sources
+- `/api/queries` - Define test queries
+- `/api/runs` - Execute and monitor test runs
+- `/docs` - Interactive API documentation
+
+## Configuration
+
+Test configurations use JSON format with these key sections:
+- `repo`: Repository location and credentials
+- `sources`: Data source definitions
+- `queries`: Query definitions with profiling options
+- `run`: Execution parameters (timing, dispatch, etc.)
+
+## Integration with Drasi
+
+The framework deploys as a Drasi SourceProvider:
+1. Build Docker images with `make`
+2. Load to Kind cluster with `make kind-load`
+3. Deploy provider with `make drasi-apply`
+4. Create sources using the E2ETestService provider type
+
+## Important Notes
+
+- Always run `make lint-check` before committing
+- The service includes OpenTelemetry for distributed tracing
+- Test data can include bootstrap files and change scripts
+- Redis is required for query result streaming
+- Dapr sidecar is optional but recommended for distributed scenarios

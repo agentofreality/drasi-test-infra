@@ -21,7 +21,7 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize, Serializer};
-
+use utoipa::ToSchema;
 use serde_json::{json, Value};
 use test_data_store::{
     scripts::{NodeRecord, RelationRecord},
@@ -68,6 +68,15 @@ pub fn get_sources_routes() -> Router {
         )
 }
 
+#[utoipa::path(
+    get,
+    path = "/test_run_host/sources",
+    tag = "sources",
+    responses(
+        (status = 200, description = "List of source IDs", body = Vec<String>),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn get_source_list_handler(
     test_run_host: Extension<Arc<TestRunHost>>,
 ) -> anyhow::Result<impl IntoResponse, TestServiceWebApiError> {
@@ -82,6 +91,19 @@ pub async fn get_source_list_handler(
     Ok(Json(sources).into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/test_run_host/sources/{id}",
+    tag = "sources",
+    params(
+        ("id" = String, Path, description = "Source identifier")
+    ),
+    responses(
+        (status = 200, description = "Source state information", body = SourceStateResponse),
+        (status = 404, description = "Source not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn get_source_handler(
     Path(id): Path<String>,
     test_run_host: Extension<Arc<TestRunHost>>,
@@ -97,10 +119,16 @@ pub async fn get_source_handler(
     Ok(Json(source_state).into_response())
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(example = json!({
+    "num_skips": 10,
+    "spacing_mode": "Recorded"
+}))]
 pub struct TestSkipConfig {
+    /// Number of events to skip
     #[serde(default)]
     pub num_skips: u64,
+    /// Spacing mode for skipping events
     pub spacing_mode: Option<SpacingMode>,
 }
 
@@ -113,14 +141,16 @@ impl Default for TestSkipConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(example = json!({
+    "nodeLabels": ["Person", "Company"],
+    "relLabels": ["WORKS_FOR", "KNOWS"]
+}))]
 pub struct SourceBootstrapRequestBody {
-    // #[serde(rename = "queryId")]
-    // pub query_id: String,
-    // #[serde(rename = "queryNodeId")]
-    // pub query_node_id: String,
+    /// Labels of nodes to include in bootstrap data
     #[serde(rename = "nodeLabels")]
     pub node_labels: Vec<String>,
+    /// Labels of relationships to include in bootstrap data
     #[serde(rename = "relLabels")]
     pub rel_labels: Vec<String>,
 }
@@ -151,12 +181,20 @@ impl SourceBootstrapResponseBody {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(example = json!({
+    "id": "person-123",
+    "labels": ["Person", "Employee"],
+    "properties": {"name": "John Doe", "age": 30, "department": "Engineering"}
+}))]
 pub struct Node {
+    /// Unique identifier for the node
     #[serde(default)]
     pub id: String,
+    /// Labels associated with the node
     #[serde(default)]
     pub labels: Vec<String>,
+    /// Properties of the node as a JSON object
     #[serde(serialize_with = "serialize_properties")]
     pub properties: Value,
 }
@@ -171,20 +209,36 @@ impl Node {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(example = json!({
+    "id": "rel-456",
+    "labels": ["REPORTS_TO"],
+    "startId": "person-123",
+    "startLabel": "Person",
+    "endId": "person-789",
+    "endLabel": "Person",
+    "properties": {"since": "2023-01-01", "direct": true}
+}))]
 pub struct Relation {
+    /// Unique identifier for the relationship
     #[serde(default)]
     pub id: String,
+    /// Labels/types of the relationship
     #[serde(default)]
     pub labels: Vec<String>,
+    /// ID of the start node
     #[serde(default, rename = "startId")]
     pub start_id: String,
+    /// Optional label of the start node
     #[serde(skip_serializing_if = "Option::is_none", rename = "startLabel")]
     pub start_label: Option<String>,
+    /// ID of the end node
     #[serde(default, rename = "endId")]
     pub end_id: String,
+    /// Optional label of the end node
     #[serde(skip_serializing_if = "Option::is_none", rename = "endLabel")]
     pub end_label: Option<String>,
+    /// Properties of the relationship as a JSON object
     #[serde(serialize_with = "serialize_properties")]
     pub properties: Value,
 }
@@ -218,6 +272,20 @@ where
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/test_run_host/sources/{id}/bootstrap",
+    tag = "sources",
+    params(
+        ("id" = String, Path, description = "Source identifier")
+    ),
+    request_body = SourceBootstrapRequestBody,
+    responses(
+        (status = 200, description = "Bootstrap data retrieved successfully", body = SourceBootstrapResponseBody),
+        (status = 404, description = "Source not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn source_bootstrap_handler(
     Path(id): Path<String>,
     test_run_host: Extension<Arc<TestRunHost>>,
@@ -250,6 +318,19 @@ pub async fn source_bootstrap_handler(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/test_run_host/sources/{id}/pause",
+    tag = "sources",
+    params(
+        ("id" = String, Path, description = "Source identifier")
+    ),
+    responses(
+        (status = 200, description = "Source paused successfully", body = SourceChangeGeneratorState),
+        (status = 404, description = "Source not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn source_change_generator_pause_handler(
     Path(id): Path<String>,
     test_run_host: Extension<Arc<TestRunHost>>,
@@ -268,6 +349,19 @@ pub async fn source_change_generator_pause_handler(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/test_run_host/sources/{id}/reset",
+    tag = "sources",
+    params(
+        ("id" = String, Path, description = "Source identifier")
+    ),
+    responses(
+        (status = 200, description = "Source reset successfully", body = SourceChangeGeneratorState),
+        (status = 404, description = "Source not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn source_change_generator_reset_handler(
     Path(id): Path<String>,
     test_run_host: Extension<Arc<TestRunHost>>,
@@ -286,6 +380,20 @@ pub async fn source_change_generator_reset_handler(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/test_run_host/sources/{id}/skip",
+    tag = "sources",
+    params(
+        ("id" = String, Path, description = "Source identifier")
+    ),
+    request_body = Option<TestSkipConfig>,
+    responses(
+        (status = 200, description = "Source skipped successfully", body = SourceChangeGeneratorState),
+        (status = 404, description = "Source not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn source_change_generator_skip_handler(
     Path(id): Path<String>,
     test_run_host: Extension<Arc<TestRunHost>>,
@@ -309,6 +417,19 @@ pub async fn source_change_generator_skip_handler(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/test_run_host/sources/{id}/start",
+    tag = "sources",
+    params(
+        ("id" = String, Path, description = "Source identifier")
+    ),
+    responses(
+        (status = 200, description = "Source started successfully", body = SourceChangeGeneratorState),
+        (status = 404, description = "Source not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn source_change_generator_start_handler(
     Path(id): Path<String>,
     test_run_host: Extension<Arc<TestRunHost>>,
@@ -327,10 +448,16 @@ pub async fn source_change_generator_start_handler(
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+#[schema(example = json!({
+    "num_steps": 5,
+    "spacing_mode": "Live"
+}))]
 pub struct TestStepConfig {
+    /// Number of steps to execute
     #[serde(default)]
     pub num_steps: u64,
+    /// Spacing mode for stepping through events
     pub spacing_mode: Option<SpacingMode>,
 }
 
@@ -343,6 +470,20 @@ impl Default for TestStepConfig {
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/test_run_host/sources/{id}/step",
+    tag = "sources",
+    params(
+        ("id" = String, Path, description = "Source identifier")
+    ),
+    request_body = Option<TestStepConfig>,
+    responses(
+        (status = 200, description = "Source stepped successfully", body = SourceChangeGeneratorState),
+        (status = 404, description = "Source not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn source_change_generator_step_handler(
     Path(id): Path<String>,
     test_run_host: Extension<Arc<TestRunHost>>,
@@ -366,6 +507,19 @@ pub async fn source_change_generator_step_handler(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/test_run_host/sources/{id}/stop",
+    tag = "sources",
+    params(
+        ("id" = String, Path, description = "Source identifier")
+    ),
+    responses(
+        (status = 200, description = "Source stopped successfully", body = SourceChangeGeneratorState),
+        (status = 404, description = "Source not found", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn source_change_generator_stop_handler(
     Path(id): Path<String>,
     test_run_host: Extension<Arc<TestRunHost>>,
@@ -384,6 +538,17 @@ pub async fn source_change_generator_stop_handler(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/test_run_host/sources",
+    tag = "sources",
+    request_body = test_run_host::sources::TestRunSourceConfig,
+    responses(
+        (status = 200, description = "Source created successfully", body = SourceStateResponse),
+        (status = 400, description = "Invalid request body", body = ErrorResponse),
+        (status = 500, description = "Internal server error", body = ErrorResponse)
+    )
+)]
 pub async fn post_source_handler(
     test_run_host: Extension<Arc<TestRunHost>>,
     body: Json<TestRunSourceConfig>,
