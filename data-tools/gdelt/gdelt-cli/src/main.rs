@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{collections::{HashMap, HashSet}, hash::{Hash, Hasher}, path::PathBuf, str::FromStr};
+use std::{collections::{HashMap, HashSet}, hash::{Hash, Hasher}, path::PathBuf};
 
 use async_zip::tokio::read::seek::ZipFileReader;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime, TimeDelta, Timelike, Utc};
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand};
 use reqwest::Client;
 use tokio::{fs::{File, OpenOptions}, io::{AsyncWriteExt, BufReader}};
 use tokio_util::compat::TokioAsyncWriteCompatExt;
@@ -27,36 +27,13 @@ use script_generator::ScriptGenerator;
 mod gdelt;
 mod postgres;
 mod script_generator;
+mod types;
 
-/// String constant containing the address of GDELT data on the Web
-const GDELT_DATA_URL: &str = "http://data.gdeltproject.org/gdeltv2";
+use types::{DataType, DataSelectionArgs, GenerateScriptsArgs, FileInfo};
 
 /// String constant representing the default GDELT data cache folder path
 /// This is the folder where GDELT data files are downloaded and stored if not provided by the user.
 const DEFAULT_CACHE_FOLDER_PATH: &str = "./gdelt_data_cache";
-
-/// Enum representing the different types of GDELT data that can be downloaded
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-enum DataType {
-    Event,
-    Graph,
-    Mention,
-}
-
-impl FromStr for DataType {
-    type Err = String;
-
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let input = input.to_lowercase();
-
-        match input.as_str() {
-            "event" | "e" => Ok(DataType::Event),
-            "graph" | "g" => Ok(DataType::Graph),
-            "mention" | "m" => Ok(DataType::Mention),
-            _ => Err(format!("Unknown variant: {}", input)),
-        }
-    }
-}
 
 impl Hash for DataType {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -133,40 +110,9 @@ enum Commands {
         overwrite: bool,        
     },
     /// Generates bootstrap and change scripts for E2E test framework
-    GenerateScripts {
-        #[command(flatten)]
-        data_selection: DataSelectionArgs,
-
-        /// Output directory for generated scripts
-        #[arg(short = 'o', long = "output", default_value = "./scripts_output")]
-        output_path: PathBuf,
-
-        /// Generate bootstrap scripts
-        #[arg(short = 'b', long, default_value_t = true)]
-        bootstrap: bool,
-
-        /// Generate change scripts
-        #[arg(short = 'c', long, default_value_t = true)]
-        changes: bool,
-    },
+    GenerateScripts(GenerateScriptsArgs),
 }
 
-#[derive(Args, Debug)]
-struct DataSelectionArgs {
-    /// The types of GDELT data to process
-    #[arg(short = 't', long, value_enum, default_value = "event,graph,mention", value_delimiter=',')]
-    data_type: Vec<DataType>,
-
-    /// The datetime from which to start processing files.
-    /// In the format YYYYMMDDHHMMSS. Defaults for missing fields
-    #[arg(short = 's', long)]
-    file_start: Option<String>,
-
-    /// The datetime at which to stop processing files
-    /// In the format YYYYMMDDHHMMSS. Defaults for missing fields
-    #[arg(short = 'e', long)]
-    file_end: Option<String>,
-}
 
 #[tokio::main]
 async fn main() {
@@ -189,8 +135,8 @@ async fn main() {
         Commands::InitDB { database_url, database_user, database_password , overwrite} => {
             handle_initdb_command(database_url, database_user, database_password, overwrite).await
         }
-        Commands::GenerateScripts { data_selection, output_path, bootstrap, changes } => {
-            handle_generate_scripts_command(data_selection, cache_folder_path, output_path, bootstrap, changes).await
+        Commands::GenerateScripts(args) => {
+            handle_generate_scripts_command(args.data_selection, cache_folder_path, args.output_path, args.bootstrap, args.changes).await
         }
     };
 
@@ -494,70 +440,6 @@ async fn handle_initdb_command(database_url: Option<String>, database_user: Opti
     Ok(())
 }
 
-#[derive(Debug)]
-struct FileInfo {
-    file_type: DataType,
-    url: String,
-    zip_path: PathBuf,
-    unzip_path: PathBuf,
-    overwrite: bool,
-    download_result: Option<anyhow::Result<()>>,
-    extract_result: Option<anyhow::Result<()>>,
-    load_result: Option<anyhow::Result<()>>,
-}
-
-impl FileInfo {
-    fn new_event_file(cache_folder_path: PathBuf, file_name: &str, overwrite: bool) -> Self {
-        Self {
-            file_type: DataType::Event,
-            url: format!("{}/{}.export.CSV.zip", GDELT_DATA_URL, file_name),
-            zip_path: cache_folder_path.join(format!("zip/{}.export.CSV.zip", file_name)),
-            unzip_path: cache_folder_path.join(format!("event/{}.export.CSV", file_name)),
-            overwrite,
-            download_result: None,
-            extract_result: None,
-            load_result: None,
-        }
-    }
-
-    fn new_graph_file(cache_folder_path: PathBuf, file_name: &str, overwrite: bool) -> Self {
-        Self {
-            file_type: DataType::Graph,
-            url: format!("{}/{}.gkg.csv.zip", GDELT_DATA_URL, file_name),
-            zip_path: cache_folder_path.join(format!("zip/{}.gkg.csv.zip", file_name)),
-            unzip_path: cache_folder_path.join(format!("graph/{}.gkg.CSV", file_name)),
-            overwrite,
-            download_result: None,
-            extract_result: None,
-            load_result: None,
-        }
-    }
-
-    fn new_mention_file(cache_folder_path: PathBuf, file_name: &str, overwrite: bool) -> Self {
-        Self {
-            file_type: DataType::Mention,
-            url: format!("{}/{}.mentions.CSV.zip", GDELT_DATA_URL, file_name),
-            zip_path: cache_folder_path.join(format!("zip/{}.mentions.CSV.zip", file_name)),
-            unzip_path: cache_folder_path.join(format!("mention/{}.mentions.CSV", file_name)),
-            overwrite,
-            download_result: None,
-            extract_result: None,
-            load_result: None,
-        }
-    }
-
-    fn set_download_result(&mut self, result: anyhow::Result<()>) {
-        self.download_result = Some(result);
-    }
-
-    fn set_extract_result(&mut self, result: anyhow::Result<()>) {
-        self.extract_result = Some(result);
-    }
-
-    fn set_load_result(&mut self, result: anyhow::Result<()>) {
-        self.load_result = Some(result);
-    }
-}
 
 fn create_gdelt_file_list(start_datetime: NaiveDateTime, end_datetime: NaiveDateTime, file_types: HashSet<DataType>, cache_folder_path: PathBuf, overwrite: bool) -> anyhow::Result<Vec<FileInfo>> {
 
