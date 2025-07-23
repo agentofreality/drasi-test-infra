@@ -12,10 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{num::NonZeroU32, str::FromStr};
 use chrono::{DateTime, Utc};
+use std::{num::NonZeroU32, str::FromStr};
 
-use serde::{Deserialize, Serialize, Serializer, de::{self, Deserializer}};
+use serde::{
+    de::{self, Deserializer},
+    Deserialize, Serialize, Serializer,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TimeMode {
@@ -37,14 +40,12 @@ impl FromStr for TimeMode {
         match s.to_lowercase().as_str() {
             "live" => Ok(Self::Live),
             "recorded" => Ok(Self::Recorded),
-            _ => {
-                match chrono::DateTime::parse_from_rfc3339(s) {
-                    Ok(t) => Ok(Self::Rebased(t.timestamp_nanos_opt().unwrap() as u64)),
-                    Err(e) => {
-                        anyhow::bail!("Error parsing TimeMode - value:{}, error:{}", s, e);
-                    }
+            _ => match chrono::DateTime::parse_from_rfc3339(s) {
+                Ok(t) => Ok(Self::Rebased(t.timestamp_nanos_opt().unwrap() as u64)),
+                Err(e) => {
+                    anyhow::bail!("Error parsing TimeMode - value:{}, error:{}", s, e);
                 }
-            }
+            },
         }
     }
 }
@@ -80,7 +81,7 @@ impl Serialize for TimeMode {
             Self::Rebased(timestamp) => {
                 // Convert the timestamp to a DateTime
                 let datetime = DateTime::<Utc>::from_timestamp_nanos(*timestamp as i64);
-                
+
                 // Format to RFC 3339 and serialize as a string
                 serializer.serialize_str(&datetime.to_rfc3339())
             }
@@ -152,9 +153,7 @@ impl Serialize for SpacingMode {
         match self {
             Self::None => serializer.serialize_str("none"),
             Self::Recorded => serializer.serialize_str("recorded"),
-            Self::Rate(rate) => {
-                serializer.serialize_str(&rate.to_string())
-            }
+            Self::Rate(rate) => serializer.serialize_str(&rate.to_string()),
         }
     }
 }
@@ -182,34 +181,32 @@ pub struct TestDefinition {
     #[serde(default)]
     pub queries: Vec<TestQueryDefinition>,
     #[serde(default)]
-    pub sources: Vec<TestSourceDefinition>,    
+    pub sources: Vec<TestSourceDefinition>,
 }
 
 impl TestDefinition {
     pub fn get_test_query(&self, query_id: &str) -> anyhow::Result<TestQueryDefinition> {
-        let test_query_definition = self.queries.iter()
+        let test_query_definition = self
+            .queries
+            .iter()
             .find(|query| query.test_query_id == query_id)
-            .ok_or_else(|| {
-                anyhow::anyhow!("Test Query with ID {:?} not found", query_id)
-            })?;
+            .ok_or_else(|| anyhow::anyhow!("Test Query with ID {:?} not found", query_id))?;
 
         Ok(test_query_definition.clone())
     }
 
-    
     pub fn get_test_source(&self, source_id: &str) -> anyhow::Result<TestSourceDefinition> {
-        let test_source_definition = self.sources.iter().find(|source| {
-            match source {
-                TestSourceDefinition::Model(def) => { def.common.test_source_id == source_id },
+        let test_source_definition = self
+            .sources
+            .iter()
+            .find(|source| match source {
+                TestSourceDefinition::Model(def) => def.common.test_source_id == source_id,
                 TestSourceDefinition::Script(def) => def.common.test_source_id == source_id,
-            }
-        }).ok_or_else(|| {
-            anyhow::anyhow!("Test Source with ID {:?} not found", source_id)
-        })?;        
+            })
+            .ok_or_else(|| anyhow::anyhow!("Test Source with ID {:?} not found", source_id))?;
 
         Ok(test_source_definition.clone())
     }
-
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -286,7 +283,7 @@ pub struct BuildingHierarchyDataGeneratorDefinition {
     pub building_count: Option<(u32, f64)>,
     pub floor_count: Option<(u32, f64)>,
     pub room_count: Option<(u32, f64)>,
-    pub room_sensors: Vec<SensorDefinition>
+    pub room_sensors: Vec<SensorDefinition>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -299,19 +296,19 @@ pub enum SensorDefinition {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FloatNormalDistSensorDefinition {
     pub id: String,
-    pub momentum_init: Option<(i32, f64, f64)>,  // mean, std_dev, reversal probability
-    pub value_change: Option<(f64, f64)>, // mean, std_dev
-    pub value_init: Option<(f64, f64)>, // mean, std_dev
-    pub value_range: Option<(f64, f64)>, // min, max
+    pub momentum_init: Option<(i32, f64, f64)>, // mean, std_dev, reversal probability
+    pub value_change: Option<(f64, f64)>,       // mean, std_dev
+    pub value_init: Option<(f64, f64)>,         // mean, std_dev
+    pub value_range: Option<(f64, f64)>,        // min, max
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IntNormalDistSensorDefinition {
     pub id: String,
     pub momentum_init: Option<(i32, f64, f64)>, // mean, std_dev, reversal probability
-    pub value_change: Option<(i64, f64)>, // mean, std_dev
-    pub value_init: Option<(i64, f64)>, // mean, std_dev
-    pub value_range: Option<(i64, i64)>, // min, max
+    pub value_change: Option<(i64, f64)>,       // mean, std_dev
+    pub value_init: Option<(i64, f64)>,         // mean, std_dev
+    pub value_range: Option<(i64, i64)>,        // min, max
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -335,15 +332,18 @@ pub struct ScriptSourceChangeGeneratorDefinition {
     pub ignore_scripted_pause_commands: bool,
     pub script_file_folder: String,
 }
-fn is_false() -> bool { false }
+fn is_false() -> bool {
+    false
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind")]
 pub enum SourceChangeDispatcherDefinition {
     Console(ConsoleSourceChangeDispatcherDefinition),
     Dapr(DaprSourceChangeDispatcherDefinition),
+    Http(HttpSourceChangeDispatcherDefinition),
     JsonlFile(JsonlFileSourceChangeDispatcherDefinition),
-    RedisStream(RedisStreamSourceChangeDispatcherDefinition)
+    RedisStream(RedisStreamSourceChangeDispatcherDefinition),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -368,7 +368,16 @@ pub struct JsonlFileSourceChangeDispatcherDefinition {
 pub struct RedisStreamSourceChangeDispatcherDefinition {
     pub host: Option<String>,
     pub port: Option<u16>,
-    pub stream_name: Option<String>
+    pub stream_name: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HttpSourceChangeDispatcherDefinition {
+    pub url: String,
+    pub port: u16,
+    pub endpoint: Option<String>,
+    pub timeout_seconds: Option<u64>,
+    pub batch_events: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -420,8 +429,12 @@ pub struct QueryId {
     #[serde(default = "default_query_id")]
     pub query_id: String,
 }
-fn default_query_node_id() -> String { "default".to_string() }
-fn default_query_id() -> String { "test_query".to_string() }
+fn default_query_node_id() -> String {
+    "default".to_string()
+}
+fn default_query_id() -> String {
+    "test_query".to_string()
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum ParseQueryIdError {
@@ -438,8 +451,8 @@ impl TryFrom<&str> for QueryId {
         let parts: Vec<&str> = value.split('.').collect();
         if parts.len() == 2 {
             Ok(QueryId {
-                node_id: parts[0].to_string(), 
-                query_id: parts[1].to_string(), 
+                node_id: parts[0].to_string(),
+                query_id: parts[1].to_string(),
             })
         } else {
             Err(ParseQueryIdError::InvalidFormat(value.to_string()))
@@ -449,7 +462,10 @@ impl TryFrom<&str> for QueryId {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs::File, io::{BufReader, Write}};
+    use std::{
+        fs::File,
+        io::{BufReader, Write},
+    };
 
     use tempfile::tempdir;
 
@@ -476,7 +492,8 @@ mod tests {
         "#;
         let file = create_test_file(content);
         let reader = BufReader::new(file);
-        let bootstrap_data_generator: BootstrapDataGeneratorDefinition = serde_json::from_reader(reader).unwrap();
+        let bootstrap_data_generator: BootstrapDataGeneratorDefinition =
+            serde_json::from_reader(reader).unwrap();
 
         match bootstrap_data_generator {
             BootstrapDataGeneratorDefinition::Script(definition) => {
@@ -499,11 +516,15 @@ mod tests {
         "#;
         let file = create_test_file(content);
         let reader = BufReader::new(file);
-        let source_change_generator: SourceChangeGeneratorDefinition = serde_json::from_reader(reader).unwrap();
+        let source_change_generator: SourceChangeGeneratorDefinition =
+            serde_json::from_reader(reader).unwrap();
 
         match source_change_generator {
             SourceChangeGeneratorDefinition::Script(definition) => {
-                assert_eq!(definition.common.spacing_mode, SpacingMode::Rate(NonZeroU32::new(100).unwrap()));
+                assert_eq!(
+                    definition.common.spacing_mode,
+                    SpacingMode::Rate(NonZeroU32::new(100).unwrap())
+                );
                 assert_eq!(definition.common.time_mode, TimeMode::Recorded);
                 assert_eq!(definition.script_file_folder, "source_change_scripts");
             }
@@ -538,12 +559,12 @@ mod tests {
                 assert_eq!(source.common.test_source_id, "source1");
 
                 match source.bootstrap_data_generator.as_ref().unwrap() {
-                    BootstrapDataGeneratorDefinition::Script(definition)=> {
+                    BootstrapDataGeneratorDefinition::Script(definition) => {
                         assert_eq!(definition.common.time_mode, TimeMode::Live);
                         assert_eq!(definition.script_file_folder, "bootstrap_data_scripts");
                     }
                 }
-        
+
                 match source.source_change_generator.as_ref().unwrap() {
                     SourceChangeGeneratorDefinition::Script(definition) => {
                         assert_eq!(definition.common.spacing_mode, SpacingMode::Recorded);
@@ -551,7 +572,6 @@ mod tests {
                         assert_eq!(definition.script_file_folder, "source_change_scripts");
                     }
                 }
-        
             }
             _ => panic!("Expected ScriptTestSourceDefinition"),
         }
@@ -574,7 +594,7 @@ mod tests {
                 assert_eq!(source.common.test_source_id, "source1");
                 assert_eq!(source.bootstrap_data_generator.is_none(), true);
                 assert_eq!(source.source_change_generator.is_none(), true);
-        }
+            }
             _ => panic!("Expected ScriptTestSourceDefinition"),
         }
     }
@@ -611,7 +631,7 @@ mod tests {
         let file = create_test_file(content);
         let reader = BufReader::new(file);
         let test_definition: TestDefinition = serde_json::from_reader(reader).unwrap();
-        
+
         assert_eq!(test_definition.test_id, "test1");
         assert_eq!(test_definition.version, 1);
         assert_eq!(test_definition.description.unwrap(), "A test definition");
@@ -629,7 +649,7 @@ mod tests {
                         assert_eq!(definition.script_file_folder, "bootstrap_data_scripts");
                     }
                 }
-        
+
                 match source.source_change_generator.as_ref().unwrap() {
                     SourceChangeGeneratorDefinition::Script(definition) => {
                         assert_eq!(definition.common.spacing_mode, SpacingMode::Recorded);
@@ -645,16 +665,28 @@ mod tests {
     #[test]
     fn test_spacing_mode_from_str() {
         assert_eq!("none".parse::<SpacingMode>().unwrap(), SpacingMode::None);
-        assert_eq!("recorded".parse::<SpacingMode>().unwrap(), SpacingMode::Recorded);
-        assert_eq!("100".parse::<SpacingMode>().unwrap(), SpacingMode::Rate(NonZeroU32::new(100).unwrap()));
-        assert_eq!("1000".parse::<SpacingMode>().unwrap(), SpacingMode::Rate(NonZeroU32::new(1000).unwrap()));
+        assert_eq!(
+            "recorded".parse::<SpacingMode>().unwrap(),
+            SpacingMode::Recorded
+        );
+        assert_eq!(
+            "100".parse::<SpacingMode>().unwrap(),
+            SpacingMode::Rate(NonZeroU32::new(100).unwrap())
+        );
+        assert_eq!(
+            "1000".parse::<SpacingMode>().unwrap(),
+            SpacingMode::Rate(NonZeroU32::new(1000).unwrap())
+        );
     }
 
     #[test]
     fn test_spacing_mode_display() {
         assert_eq!(SpacingMode::None.to_string(), "none");
         assert_eq!(SpacingMode::Recorded.to_string(), "recorded");
-        assert_eq!(SpacingMode::Rate(NonZeroU32::new(1000).unwrap()).to_string(), "1000");
+        assert_eq!(
+            SpacingMode::Rate(NonZeroU32::new(1000).unwrap()).to_string(),
+            "1000"
+        );
     }
 
     #[test]
@@ -669,7 +701,10 @@ mod tests {
 
         let json = r#""1000""#;
         let spacing_mode: SpacingMode = serde_json::from_str(json).unwrap();
-        assert_eq!(spacing_mode, SpacingMode::Rate(NonZeroU32::new(1000).unwrap()));
+        assert_eq!(
+            spacing_mode,
+            SpacingMode::Rate(NonZeroU32::new(1000).unwrap())
+        );
     }
 
     #[test]
@@ -677,15 +712,24 @@ mod tests {
         assert_eq!("live".parse::<TimeMode>().unwrap(), TimeMode::Live);
         assert_eq!("recorded".parse::<TimeMode>().unwrap(), TimeMode::Recorded);
         let timestamp = "2021-09-14T14:12:00Z";
-        let parsed_time = chrono::DateTime::parse_from_rfc3339(timestamp).unwrap().timestamp_nanos_opt().unwrap() as u64;
-        assert_eq!(timestamp.parse::<TimeMode>().unwrap(), TimeMode::Rebased(parsed_time));
+        let parsed_time = chrono::DateTime::parse_from_rfc3339(timestamp)
+            .unwrap()
+            .timestamp_nanos_opt()
+            .unwrap() as u64;
+        assert_eq!(
+            timestamp.parse::<TimeMode>().unwrap(),
+            TimeMode::Rebased(parsed_time)
+        );
     }
 
     #[test]
     fn test_time_mode_display() {
         assert_eq!(TimeMode::Live.to_string(), "live");
         assert_eq!(TimeMode::Recorded.to_string(), "recorded");
-        assert_eq!(TimeMode::Rebased(1631629920000000000).to_string(), "1631629920000000000");
+        assert_eq!(
+            TimeMode::Rebased(1631629920000000000).to_string(),
+            "1631629920000000000"
+        );
     }
 
     #[test]
@@ -699,9 +743,11 @@ mod tests {
         assert_eq!(time_mode, TimeMode::Recorded);
 
         let json = r#""2021-09-14T14:12:00Z""#;
-        let parsed_time = chrono::DateTime::parse_from_rfc3339("2021-09-14T14:12:00Z").unwrap().timestamp_nanos_opt().unwrap() as u64;
+        let parsed_time = chrono::DateTime::parse_from_rfc3339("2021-09-14T14:12:00Z")
+            .unwrap()
+            .timestamp_nanos_opt()
+            .unwrap() as u64;
         let time_mode: TimeMode = serde_json::from_str(json).unwrap();
         assert_eq!(time_mode, TimeMode::Rebased(parsed_time));
     }
 }
-
