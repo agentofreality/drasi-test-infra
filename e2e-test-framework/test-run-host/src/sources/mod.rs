@@ -15,20 +15,34 @@
 use std::{collections::HashSet, fmt, str::FromStr};
 
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize, de::{self, Deserializer}};
+use serde::{
+    de::{self, Deserializer},
+    Deserialize, Serialize,
+};
 
 use bootstrap_data_generators::BootstrapData;
 use model_test_run_source::ModelTestRunSource;
 use script_test_run_source::ScriptTestRunSource;
-use source_change_generators::{ SourceChangeGeneratorCommandResponse, SourceChangeGeneratorState};
-use test_data_store::{test_repo_storage::{models::{ QueryId, SourceChangeDispatcherDefinition, SpacingMode, TestSourceDefinition, TimeMode}, TestSourceStorage}, test_run_storage::{ParseTestRunIdError, ParseTestRunSourceIdError, TestRunId, TestRunSourceId, TestRunSourceStorage}};
+use source_change_generators::{SourceChangeGeneratorCommandResponse, SourceChangeGeneratorState};
+use test_data_store::{
+    test_repo_storage::{
+        models::{
+            QueryId, SourceChangeDispatcherDefinition, SpacingMode, TestSourceDefinition, TimeMode,
+        },
+        TestSourceStorage,
+    },
+    test_run_storage::{
+        ParseTestRunIdError, ParseTestRunSourceIdError, TestRunId, TestRunSourceId,
+        TestRunSourceStorage,
+    },
+};
 
 pub mod bootstrap_data_generators;
 pub mod model_data_generators;
 pub mod model_test_run_source;
 pub mod script_test_run_source;
-pub mod source_change_generators;
 pub mod source_change_dispatchers;
+pub mod source_change_generators;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum SourceStartMode {
@@ -108,7 +122,7 @@ pub struct TestRunSourceChangeGeneratorOverrides {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TestRunSourceConfig {
-    pub start_mode: Option<SourceStartMode>,    
+    pub start_mode: Option<SourceStartMode>,
     pub test_id: String,
     pub test_repo_id: String,
     pub test_run_id: Option<String>,
@@ -122,7 +136,11 @@ impl TryFrom<&TestRunSourceConfig> for TestRunId {
     fn try_from(value: &TestRunSourceConfig) -> Result<Self, Self::Error> {
         Ok(match value.test_run_id.as_deref() {
             Some(test_run_id) => TestRunId::new(&value.test_repo_id, &value.test_id, test_run_id),
-            None => TestRunId::new(&value.test_repo_id, &value.test_id, &chrono::Utc::now().format("%Y%m%d%H%M%S").to_string()),
+            None => TestRunId::new(
+                &value.test_repo_id,
+                &value.test_id,
+                &chrono::Utc::now().format("%Y%m%d%H%M%S").to_string(),
+            ),
         })
     }
 }
@@ -132,9 +150,7 @@ impl TryFrom<&TestRunSourceConfig> for TestRunSourceId {
 
     fn try_from(value: &TestRunSourceConfig) -> Result<Self, Self::Error> {
         match TestRunId::try_from(value) {
-            Ok(test_run_id) => {
-                Ok(TestRunSourceId::new(&test_run_id, &value.test_source_id))
-            }
+            Ok(test_run_id) => Ok(TestRunSourceId::new(&test_run_id, &value.test_source_id)),
             Err(e) => Err(ParseTestRunSourceIdError::InvalidValues(e.to_string())),
         }
     }
@@ -155,21 +171,46 @@ pub struct TestRunSourceState {
 }
 
 #[async_trait]
-pub trait TestRunSource : Send + Sync + std::fmt::Debug {
-    async fn get_bootstrap_data(&self, node_labels: &HashSet<String>, rel_labels: &HashSet<String>) -> anyhow::Result<BootstrapData>;
+pub trait TestRunSource: Send + Sync + std::fmt::Debug {
+    async fn get_bootstrap_data(
+        &self,
+        node_labels: &HashSet<String>,
+        rel_labels: &HashSet<String>,
+    ) -> anyhow::Result<BootstrapData>;
     async fn get_state(&self) -> anyhow::Result<TestRunSourceState>;
-    async fn get_source_change_generator_state(&self) -> anyhow::Result<SourceChangeGeneratorState>;
-    async fn pause_source_change_generator(&self) -> anyhow::Result<SourceChangeGeneratorCommandResponse>;
-    async fn reset_source_change_generator(&self) -> anyhow::Result<SourceChangeGeneratorCommandResponse>;
-    async fn skip_source_change_generator(&self, skips: u64, spacing_mode: Option<SpacingMode>) -> anyhow::Result<SourceChangeGeneratorCommandResponse>;
-    async fn start_source_change_generator(&self) -> anyhow::Result<SourceChangeGeneratorCommandResponse>;
-    async fn step_source_change_generator(&self, steps: u64, spacing_mode: Option<SpacingMode>) -> anyhow::Result<SourceChangeGeneratorCommandResponse>;
-    async fn stop_source_change_generator(&self) -> anyhow::Result<SourceChangeGeneratorCommandResponse>;
+    async fn get_source_change_generator_state(&self)
+        -> anyhow::Result<SourceChangeGeneratorState>;
+    async fn pause_source_change_generator(
+        &self,
+    ) -> anyhow::Result<SourceChangeGeneratorCommandResponse>;
+    async fn reset_source_change_generator(
+        &self,
+    ) -> anyhow::Result<SourceChangeGeneratorCommandResponse>;
+    async fn skip_source_change_generator(
+        &self,
+        skips: u64,
+        spacing_mode: Option<SpacingMode>,
+    ) -> anyhow::Result<SourceChangeGeneratorCommandResponse>;
+    async fn start_source_change_generator(
+        &self,
+    ) -> anyhow::Result<SourceChangeGeneratorCommandResponse>;
+    async fn step_source_change_generator(
+        &self,
+        steps: u64,
+        spacing_mode: Option<SpacingMode>,
+    ) -> anyhow::Result<SourceChangeGeneratorCommandResponse>;
+    async fn stop_source_change_generator(
+        &self,
+    ) -> anyhow::Result<SourceChangeGeneratorCommandResponse>;
 }
 
 #[async_trait]
 impl TestRunSource for Box<dyn TestRunSource + Send + Sync> {
-    async fn get_bootstrap_data(&self, node_labels: &HashSet<String>, rel_labels: &HashSet<String>) -> anyhow::Result<BootstrapData> {
+    async fn get_bootstrap_data(
+        &self,
+        node_labels: &HashSet<String>,
+        rel_labels: &HashSet<String>,
+    ) -> anyhow::Result<BootstrapData> {
         (**self).get_bootstrap_data(node_labels, rel_labels).await
     }
 
@@ -177,53 +218,69 @@ impl TestRunSource for Box<dyn TestRunSource + Send + Sync> {
         (**self).get_state().await
     }
 
-    async fn get_source_change_generator_state(&self) -> anyhow::Result<SourceChangeGeneratorState> {
+    async fn get_source_change_generator_state(
+        &self,
+    ) -> anyhow::Result<SourceChangeGeneratorState> {
         (**self).get_source_change_generator_state().await
     }
 
-    async fn pause_source_change_generator(&self) -> anyhow::Result<SourceChangeGeneratorCommandResponse> {
+    async fn pause_source_change_generator(
+        &self,
+    ) -> anyhow::Result<SourceChangeGeneratorCommandResponse> {
         (**self).pause_source_change_generator().await
     }
 
-    async fn reset_source_change_generator(&self) -> anyhow::Result<SourceChangeGeneratorCommandResponse> {
+    async fn reset_source_change_generator(
+        &self,
+    ) -> anyhow::Result<SourceChangeGeneratorCommandResponse> {
         (**self).reset_source_change_generator().await
     }
 
-    async fn skip_source_change_generator(&self, skips: u64, spacing_mode: Option<SpacingMode>) -> anyhow::Result<SourceChangeGeneratorCommandResponse> {
-        (**self).skip_source_change_generator(skips, spacing_mode).await
+    async fn skip_source_change_generator(
+        &self,
+        skips: u64,
+        spacing_mode: Option<SpacingMode>,
+    ) -> anyhow::Result<SourceChangeGeneratorCommandResponse> {
+        (**self)
+            .skip_source_change_generator(skips, spacing_mode)
+            .await
     }
 
-    async fn start_source_change_generator(&self) -> anyhow::Result<SourceChangeGeneratorCommandResponse> {
+    async fn start_source_change_generator(
+        &self,
+    ) -> anyhow::Result<SourceChangeGeneratorCommandResponse> {
         (**self).start_source_change_generator().await
     }
 
-    async fn step_source_change_generator(&self, steps: u64, spacing_mode: Option<SpacingMode>) -> anyhow::Result<SourceChangeGeneratorCommandResponse> {
-        (**self).step_source_change_generator(steps, spacing_mode).await
+    async fn step_source_change_generator(
+        &self,
+        steps: u64,
+        spacing_mode: Option<SpacingMode>,
+    ) -> anyhow::Result<SourceChangeGeneratorCommandResponse> {
+        (**self)
+            .step_source_change_generator(steps, spacing_mode)
+            .await
     }
 
-    async fn stop_source_change_generator(&self) -> anyhow::Result<SourceChangeGeneratorCommandResponse> {
+    async fn stop_source_change_generator(
+        &self,
+    ) -> anyhow::Result<SourceChangeGeneratorCommandResponse> {
         (**self).stop_source_change_generator().await
     }
 }
 
-pub async fn create_test_run_source(cfg: &TestRunSourceConfig,  def: &TestSourceDefinition, input_storage: TestSourceStorage, output_storage: TestRunSourceStorage) -> anyhow::Result<Box<dyn TestRunSource + Send + Sync>> {
-
+pub async fn create_test_run_source(
+    cfg: &TestRunSourceConfig,
+    def: &TestSourceDefinition,
+    input_storage: TestSourceStorage,
+    output_storage: TestRunSourceStorage,
+) -> anyhow::Result<Box<dyn TestRunSource + Send + Sync>> {
     match def {
-        TestSourceDefinition::Model(def) => {
-            Ok(Box::new(ModelTestRunSource::new(
-                cfg,
-                def,
-                input_storage,
-                output_storage
-            ).await?) as Box<dyn TestRunSource + Send + Sync>)
-        }, 
-        TestSourceDefinition::Script(def) => {
-            Ok(Box::new(ScriptTestRunSource::new(
-                cfg,
-                def,
-                input_storage,
-                output_storage
-            ).await?) as Box<dyn TestRunSource + Send + Sync>)
-        },
+        TestSourceDefinition::Model(def) => Ok(Box::new(
+            ModelTestRunSource::new(cfg, def, input_storage, output_storage).await?,
+        ) as Box<dyn TestRunSource + Send + Sync>),
+        TestSourceDefinition::Script(def) => Ok(Box::new(
+            ScriptTestRunSource::new(cfg, def, input_storage, output_storage).await?,
+        ) as Box<dyn TestRunSource + Send + Sync>),
     }
 }

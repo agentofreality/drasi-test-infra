@@ -14,7 +14,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::queries::{result_stream_handlers::ResultStreamRecord, result_stream_record::QueryResultRecord};
+use crate::queries::{
+    result_stream_handlers::ResultStreamRecord, result_stream_record::QueryResultRecord,
+};
 
 use super::{ResultStreamHandlerError, ResultStreamHandlerMessage};
 
@@ -40,31 +42,25 @@ impl TryInto<ResultStreamHandlerMessage> for RedisStreamReadResult {
                     id: record.id,
                     seq: self.seq,
                     traceparent: record.traceparent,
-                    tracestate: record.tracestate
+                    tracestate: record.tracestate,
                 };
 
                 Ok(ResultStreamHandlerMessage::Record(result_stream_record))
-            },
-            None => {
-                match self.error {
-                    Some(e) => {
-                        Ok(ResultStreamHandlerMessage::Error(e))
-                    },
-                    None => {
-                        Err(anyhow::anyhow!("No record or error found in stream entry"))
-                    }
-                }
             }
+            None => match self.error {
+                Some(e) => Ok(ResultStreamHandlerMessage::Error(e)),
+                None => Err(anyhow::anyhow!("No record or error found in stream entry")),
+            },
         }
     }
-}    
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RedisStreamRecordData {
     pub data: QueryResultRecord,
     pub id: String,
     pub traceparent: Option<String>,
-    pub tracestate: Option<String>
+    pub tracestate: Option<String>,
 }
 
 impl TryFrom<&str> for RedisStreamRecordData {

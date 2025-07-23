@@ -189,7 +189,10 @@ pub(crate) async fn start_web_api(
 
     log::info!("Test Service Web API listening on http://{}", addr);
     log::info!("API Documentation available at http://{}/docs", addr);
-    log::info!("OpenAPI JSON specification available at http://{}/api-docs/openapi.json", addr);
+    log::info!(
+        "OpenAPI JSON specification available at http://{}/api-docs/openapi.json",
+        addr
+    );
 
     let server = axum::Server::bind(&addr).serve(app.into_make_service());
 

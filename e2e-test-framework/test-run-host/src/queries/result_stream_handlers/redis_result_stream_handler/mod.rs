@@ -12,15 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{sync::{atomic::{AtomicUsize, Ordering}, Arc}, time::SystemTime};
+use std::{
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::SystemTime,
+};
 
 use async_trait::async_trait;
-use redis::{aio::MultiplexedConnection, streams::{StreamId, StreamReadOptions, StreamReadReply}, AsyncCommands, RedisResult};
+use redis::{
+    aio::MultiplexedConnection,
+    streams::{StreamId, StreamReadOptions, StreamReadReply},
+    AsyncCommands, RedisResult,
+};
 use redis_stream_read_result::{RedisStreamReadResult, RedisStreamRecordData};
-use test_data_store::{test_repo_storage::models::RedisStreamResultStreamHandlerDefinition, test_run_storage::TestRunQueryId};
-use tokio::sync::{mpsc::{Receiver, Sender}, Notify, RwLock};
+use test_data_store::{
+    test_repo_storage::models::RedisStreamResultStreamHandlerDefinition,
+    test_run_storage::TestRunQueryId,
+};
+use tokio::sync::{
+    mpsc::{Receiver, Sender},
+    Notify, RwLock,
+};
 
-use super::{ResultStreamHandler, ResultStreamHandlerError, ResultStreamHandlerMessage, ResultStreamHandlerStatus};
+use super::{
+    ResultStreamHandler, ResultStreamHandlerError, ResultStreamHandlerMessage,
+    ResultStreamHandlerStatus,
+};
 
 pub mod redis_stream_read_result;
 
@@ -36,15 +55,23 @@ pub struct RedisResultStreamHandlerSettings {
 }
 
 impl RedisResultStreamHandlerSettings {
-    pub fn new(id: TestRunQueryId, definition: RedisStreamResultStreamHandlerDefinition) -> anyhow::Result<Self> {
-
+    pub fn new(
+        id: TestRunQueryId,
+        definition: RedisStreamResultStreamHandlerDefinition,
+    ) -> anyhow::Result<Self> {
         Ok(RedisResultStreamHandlerSettings {
-            host: definition.host.clone().unwrap_or_else(|| "127.0.0.1".to_string()),
+            host: definition
+                .host
+                .clone()
+                .unwrap_or_else(|| "127.0.0.1".to_string()),
             port: definition.port.unwrap_or(6379),
             process_old_entries: definition.process_old_entries.unwrap_or(false),
             query_id: id.test_query_id.clone(),
-            stream_name: definition.stream_name.clone().unwrap_or_else(|| format!("{}-results", id.test_query_id.clone())),
-            test_run_query_id: id
+            stream_name: definition
+                .stream_name
+                .clone()
+                .unwrap_or_else(|| format!("{}-results", id.test_query_id.clone())),
+            test_run_query_id: id,
         })
     }
 }
@@ -59,13 +86,19 @@ pub struct RedisResultStreamHandler {
 
 impl RedisResultStreamHandler {
     #[allow(clippy::new_ret_no_self)]
-    pub async fn new(id: TestRunQueryId, definition: RedisStreamResultStreamHandlerDefinition) -> anyhow::Result<Box<dyn ResultStreamHandler + Send + Sync>> {
+    pub async fn new(
+        id: TestRunQueryId,
+        definition: RedisStreamResultStreamHandlerDefinition,
+    ) -> anyhow::Result<Box<dyn ResultStreamHandler + Send + Sync>> {
         let settings = RedisResultStreamHandlerSettings::new(id, definition)?;
-        log::trace!("Creating RedisResultStreamHandler with settings {:?}", settings);
+        log::trace!(
+            "Creating RedisResultStreamHandler with settings {:?}",
+            settings
+        );
 
         let notifier = Arc::new(Notify::new());
         let status = Arc::new(RwLock::new(ResultStreamHandlerStatus::Uninitialized));
-        
+
         Ok(Box::new(Self {
             notifier,
             seq: Arc::new(AtomicUsize::new(0)),
@@ -84,26 +117,32 @@ impl ResultStreamHandler for RedisResultStreamHandler {
             match *status {
                 ResultStreamHandlerStatus::Uninitialized => {
                     let (handler_tx_channel, handler_rx_channel) = tokio::sync::mpsc::channel(100);
-                    
+
                     *status = ResultStreamHandlerStatus::Paused;
-    
-                    tokio::spawn(reader_thread(self.seq.clone(), self.settings.clone(), self.status.clone(), self.notifier.clone(), handler_tx_channel));
-    
+
+                    tokio::spawn(reader_thread(
+                        self.seq.clone(),
+                        self.settings.clone(),
+                        self.status.clone(),
+                        self.notifier.clone(),
+                        handler_tx_channel,
+                    ));
+
                     Ok(handler_rx_channel)
-                },
+                }
                 ResultStreamHandlerStatus::Running => {
                     anyhow::bail!("Cant Init Handler, Handler currently Running");
-                },
+                }
                 ResultStreamHandlerStatus::Paused => {
                     anyhow::bail!("Cant Init Handler, Handler currently Paused");
-                },
+                }
                 ResultStreamHandlerStatus::Stopped => {
                     anyhow::bail!("Cant Init Handler, Handler currently Stopped");
-                },            
+                }
                 ResultStreamHandlerStatus::Error => {
                     anyhow::bail!("Handler in Error state");
-                },
-            }    
+                }
+            }
         } else {
             anyhow::bail!("Could not acquire status lock");
         }
@@ -116,21 +155,19 @@ impl ResultStreamHandler for RedisResultStreamHandler {
             match *status {
                 ResultStreamHandlerStatus::Uninitialized => {
                     anyhow::bail!("Can't Start Handler, Handler Uninitialized");
-                },
-                ResultStreamHandlerStatus::Running => {
-                    Ok(())
-                },
+                }
+                ResultStreamHandlerStatus::Running => Ok(()),
                 ResultStreamHandlerStatus::Paused => {
                     *status = ResultStreamHandlerStatus::Running;
                     self.notifier.notify_one();
                     Ok(())
-                },
+                }
                 ResultStreamHandlerStatus::Stopped => {
                     anyhow::bail!("Cant Start Handler, Handler already Stopped");
-                },            
+                }
                 ResultStreamHandlerStatus::Error => {
                     anyhow::bail!("Handler in Error state");
-                },
+                }
             }
         } else {
             anyhow::bail!("Could not acquire status lock");
@@ -144,20 +181,18 @@ impl ResultStreamHandler for RedisResultStreamHandler {
             match *status {
                 ResultStreamHandlerStatus::Uninitialized => {
                     anyhow::bail!("Cant Pause Handler, Handler Uninitialized");
-                },
+                }
                 ResultStreamHandlerStatus::Running => {
                     *status = ResultStreamHandlerStatus::Paused;
                     Ok(())
-                },
-                ResultStreamHandlerStatus::Paused => {
-                    Ok(())
-                },
+                }
+                ResultStreamHandlerStatus::Paused => Ok(()),
                 ResultStreamHandlerStatus::Stopped => {
                     anyhow::bail!("Cant Pause Handler, Handler already Stopped");
-                },            
+                }
                 ResultStreamHandlerStatus::Error => {
                     anyhow::bail!("Handler in Error state");
-                },
+                }
             }
         } else {
             anyhow::bail!("Could not acquire status lock");
@@ -171,22 +206,20 @@ impl ResultStreamHandler for RedisResultStreamHandler {
             match *status {
                 ResultStreamHandlerStatus::Uninitialized => {
                     anyhow::bail!("Handler not initialized, current status: Uninitialized");
-                },
+                }
                 ResultStreamHandlerStatus::Running => {
                     *status = ResultStreamHandlerStatus::Stopped;
                     Ok(())
-                },
+                }
                 ResultStreamHandlerStatus::Paused => {
                     *status = ResultStreamHandlerStatus::Stopped;
                     self.notifier.notify_one();
                     Ok(())
-                },
-                ResultStreamHandlerStatus::Stopped => {
-                    Ok(())
-                },            
+                }
+                ResultStreamHandlerStatus::Stopped => Ok(()),
                 ResultStreamHandlerStatus::Error => {
                     anyhow::bail!("Handler in Error state");
-                },
+                }
             }
         } else {
             anyhow::bail!("Could not acquire status lock");
@@ -195,30 +228,36 @@ impl ResultStreamHandler for RedisResultStreamHandler {
 }
 
 async fn reader_thread(
-    seq: Arc<AtomicUsize>, 
-    settings: RedisResultStreamHandlerSettings, 
-    status: Arc<RwLock<ResultStreamHandlerStatus>>, 
-    notify: Arc<Notify>, 
-    result_stream_handler_tx_channel: Sender<ResultStreamHandlerMessage>) 
-{
+    seq: Arc<AtomicUsize>,
+    settings: RedisResultStreamHandlerSettings,
+    status: Arc<RwLock<ResultStreamHandlerStatus>>,
+    notify: Arc<Notify>,
+    result_stream_handler_tx_channel: Sender<ResultStreamHandlerMessage>,
+) {
     log::debug!("Starting RedisResultStreamHandler Reader Thread");
 
-    let client_result = redis::Client::open(format!("redis://{}:{}", &settings.host, &settings.port));
+    let client_result =
+        redis::Client::open(format!("redis://{}:{}", &settings.host, &settings.port));
 
     let client = match client_result {
         Ok(client) => {
             log::debug!("Created Redis Client");
             client
-        },
+        }
         Err(e) => {
             let msg = format!("Client creation error: {:?}", e);
             log::error!("{}", &msg);
             *status.write().await = ResultStreamHandlerStatus::Error;
-            match result_stream_handler_tx_channel.send(ResultStreamHandlerMessage::Error(ResultStreamHandlerError::RedisError(e))).await {
-                Ok(_) => {},
+            match result_stream_handler_tx_channel
+                .send(ResultStreamHandlerMessage::Error(
+                    ResultStreamHandlerError::RedisError(e),
+                ))
+                .await
+            {
+                Ok(_) => {}
                 Err(e) => {
                     log::error!("Error sending error message: {:?}", e);
-                }   
+                }
             }
             return;
         }
@@ -230,13 +269,18 @@ async fn reader_thread(
         Ok(con) => {
             log::debug!("Connected to Redis");
             con
-        },
+        }
         Err(e) => {
             let msg = format!("Connection Error: {:?}", e);
             log::error!("{}", &msg);
             *status.write().await = ResultStreamHandlerStatus::Error;
-            match result_stream_handler_tx_channel.send(ResultStreamHandlerMessage::Error(ResultStreamHandlerError::RedisError(e))).await {
-                Ok(_) => {},
+            match result_stream_handler_tx_channel
+                .send(ResultStreamHandlerMessage::Error(
+                    ResultStreamHandlerError::RedisError(e),
+                ))
+                .await
+            {
+                Ok(_) => {}
                 Err(e) => {
                     log::error!("Error sending error message: {:?}", e);
                 }
@@ -248,7 +292,7 @@ async fn reader_thread(
     let stream_key = &settings.stream_name;
     let mut stream_last_id = match settings.process_old_entries {
         true => "0-0".to_string(),
-        false =>  "$".to_string(),
+        false => "$".to_string(),
     };
     let opts = StreamReadOptions::default().count(1).block(5000);
 
@@ -263,77 +307,97 @@ async fn reader_thread(
         };
 
         match current_status {
-            ResultStreamHandlerStatus::Uninitialized 
-            | ResultStreamHandlerStatus::Error => {
+            ResultStreamHandlerStatus::Uninitialized | ResultStreamHandlerStatus::Error => {
                 log::error!("Reader thread Uninitialized or Error, shutting down");
                 return;
-            },
+            }
             ResultStreamHandlerStatus::Stopped => {
-                log::debug!("Reader thread Stopped, sending StreamStopping message and shutting down");
+                log::debug!(
+                    "Reader thread Stopped, sending StreamStopping message and shutting down"
+                );
 
-                match result_stream_handler_tx_channel.send(ResultStreamHandlerMessage::StreamStopping).await {
-                    Ok(_) => {},
+                match result_stream_handler_tx_channel
+                    .send(ResultStreamHandlerMessage::StreamStopping)
+                    .await
+                {
+                    Ok(_) => {}
                     Err(e) => {
-                        log::error!("Reader thread error sending StreamStopping message: {:?}", e);
+                        log::error!(
+                            "Reader thread error sending StreamStopping message: {:?}",
+                            e
+                        );
                     }
-                }                
+                }
                 return;
-            },
+            }
             ResultStreamHandlerStatus::Paused => {
                 log::debug!("Reader thread Paused, waiting to be notified");
                 notify.notified().await;
                 log::debug!("Notified");
-            },
+            }
             ResultStreamHandlerStatus::Running => {
-                let read_result = read_stream(&mut con, seq.clone(), stream_key, &stream_last_id, &opts).await;
+                let read_result =
+                    read_stream(&mut con, seq.clone(), stream_key, &stream_last_id, &opts).await;
                 match read_result {
                     Ok(results) => {
                         for result in results {
                             stream_last_id = result.id.clone();
 
-                            let result_stream_handler_message: ResultStreamHandlerMessage = match result.try_into() {
-                                Ok(msg) => msg,
-                                Err(e) => {
-                                    log::error!("Error converting RedisStreamReadResult to ResultStreamHandlerMessage: {:?}", e);
-                                    ResultStreamHandlerMessage::Error(ResultStreamHandlerError::ConversionError)
-                                }
-                            };
-
-                            match result_stream_handler_tx_channel.send(result_stream_handler_message).await {
-                                Ok(_) => {},
-                                Err(e) => {
-                                    match e {
-                                        tokio::sync::mpsc::error::SendError(msg) => {
-                                            log::error!("Error sending change message: {:?}", msg);
-                                        }
+                            let result_stream_handler_message: ResultStreamHandlerMessage =
+                                match result.try_into() {
+                                    Ok(msg) => msg,
+                                    Err(e) => {
+                                        log::error!("Error converting RedisStreamReadResult to ResultStreamHandlerMessage: {:?}", e);
+                                        ResultStreamHandlerMessage::Error(
+                                            ResultStreamHandlerError::ConversionError,
+                                        )
                                     }
-                                }
+                                };
+
+                            match result_stream_handler_tx_channel
+                                .send(result_stream_handler_message)
+                                .await
+                            {
+                                Ok(_) => {}
+                                Err(e) => match e {
+                                    tokio::sync::mpsc::error::SendError(msg) => {
+                                        log::error!("Error sending change message: {:?}", msg);
+                                    }
+                                },
                             }
                         }
-                    },
+                    }
                     Err(e) => {
                         log::error!("Error reading from Redis stream: {:?}", e);
                     }
                 }
-            },
+            }
         }
     }
 }
 
-async fn read_stream(con: &mut MultiplexedConnection, seq: Arc<AtomicUsize>, stream_key: &str, stream_last_id: &str, read_options: &StreamReadOptions) -> anyhow::Result<Vec<RedisStreamReadResult>>{
-
-    let xread_result: RedisResult<StreamReadReply> = con.xread_options(&[stream_key], &[stream_last_id], read_options).await;
+async fn read_stream(
+    con: &mut MultiplexedConnection,
+    seq: Arc<AtomicUsize>,
+    stream_key: &str,
+    stream_last_id: &str,
+    read_options: &StreamReadOptions,
+) -> anyhow::Result<Vec<RedisStreamReadResult>> {
+    let xread_result: RedisResult<StreamReadReply> = con
+        .xread_options(&[stream_key], &[stream_last_id], read_options)
+        .await;
 
     let xread_result = match xread_result {
-        Ok(xread_result) => {
-            xread_result
-        },
+        Ok(xread_result) => xread_result,
         Err(e) => {
             return Err(anyhow::anyhow!("Error reading from stream: {:?}", e));
         }
     };
-    
-    let dequeue_time_ns = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64;
+
+    let dequeue_time_ns = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64;
 
     let mut records: Vec<RedisStreamReadResult> = Vec::new();
 
@@ -347,35 +411,20 @@ async fn read_stream(con: &mut MultiplexedConnection, seq: Arc<AtomicUsize>, str
             let enqueue_time_ns = id.split('-').next().unwrap().parse::<u64>().unwrap() * 1_000_000;
 
             match map.get("data") {
-                Some(data) => {
-                    match data {
-                        redis::Value::BulkString(bs_data) => {
-                            match String::from_utf8(bs_data.to_vec()) {
-                                Ok(s) => {
-                                    match RedisStreamRecordData::try_from(&s) {
-                                        Ok(record) => {
-                                            records.push(RedisStreamReadResult {
-                                                id,
-                                                seq: seq.fetch_add(1, Ordering::SeqCst),
-                                                enqueue_time_ns,
-                                                dequeue_time_ns,
-                                                record: Some(record),
-                                                error: None,
-                                            });                                            
-                                        },
-                                        Err(e) => {
-                                            log::error!("Error: {:?}", e);
-                                            records.push(RedisStreamReadResult {
-                                                id,
-                                                seq: seq.fetch_add(1, Ordering::SeqCst),
-                                                enqueue_time_ns,
-                                                dequeue_time_ns,
-                                                record: None,
-                                                error: Some(ResultStreamHandlerError::InvalidStreamData),
-                                            });   
-                                        }
-                                    }
-                                },
+                Some(data) => match data {
+                    redis::Value::BulkString(bs_data) => {
+                        match String::from_utf8(bs_data.to_vec()) {
+                            Ok(s) => match RedisStreamRecordData::try_from(&s) {
+                                Ok(record) => {
+                                    records.push(RedisStreamReadResult {
+                                        id,
+                                        seq: seq.fetch_add(1, Ordering::SeqCst),
+                                        enqueue_time_ns,
+                                        dequeue_time_ns,
+                                        record: Some(record),
+                                        error: None,
+                                    });
+                                }
                                 Err(e) => {
                                     log::error!("Error: {:?}", e);
                                     records.push(RedisStreamReadResult {
@@ -385,21 +434,32 @@ async fn read_stream(con: &mut MultiplexedConnection, seq: Arc<AtomicUsize>, str
                                         dequeue_time_ns,
                                         record: None,
                                         error: Some(ResultStreamHandlerError::InvalidStreamData),
-                                    });   
+                                    });
                                 }
+                            },
+                            Err(e) => {
+                                log::error!("Error: {:?}", e);
+                                records.push(RedisStreamReadResult {
+                                    id,
+                                    seq: seq.fetch_add(1, Ordering::SeqCst),
+                                    enqueue_time_ns,
+                                    dequeue_time_ns,
+                                    record: None,
+                                    error: Some(ResultStreamHandlerError::InvalidStreamData),
+                                });
                             }
-                        },
-                        _ => {
-                            log::error!("Data is not a BulkString");
-                            records.push(RedisStreamReadResult {
-                                id,
-                                seq: seq.fetch_add(1, Ordering::SeqCst),
-                                enqueue_time_ns,
-                                dequeue_time_ns,
-                                record: None,
-                                error: Some(ResultStreamHandlerError::InvalidStreamData),
-                            });   
                         }
+                    }
+                    _ => {
+                        log::error!("Data is not a BulkString");
+                        records.push(RedisStreamReadResult {
+                            id,
+                            seq: seq.fetch_add(1, Ordering::SeqCst),
+                            enqueue_time_ns,
+                            dequeue_time_ns,
+                            record: None,
+                            error: Some(ResultStreamHandlerError::InvalidStreamData),
+                        });
                     }
                 },
                 None => {
@@ -411,7 +471,7 @@ async fn read_stream(con: &mut MultiplexedConnection, seq: Arc<AtomicUsize>, str
                         dequeue_time_ns,
                         record: None,
                         error: Some(ResultStreamHandlerError::InvalidStreamData),
-                    });   
+                    });
                 }
             };
         }

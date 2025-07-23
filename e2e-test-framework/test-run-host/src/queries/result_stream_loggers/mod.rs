@@ -39,7 +39,7 @@ pub enum ResultStreamLoggerConfig {
     JsonlFile(JsonlFileResultStreamLoggerConfig),
     OtelMetric(OtelMetricResultStreamLoggerConfig),
     OtelTrace(OtelTraceResultStreamLoggerConfig),
-    Profiler(ProfilerResultStreamLoggerConfig)
+    Profiler(ProfilerResultStreamLoggerConfig),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -67,9 +67,10 @@ pub struct ResultStreamLoggerResult {
 }
 
 #[async_trait]
-pub trait ResultStreamLogger : Send + Sync {
+pub trait ResultStreamLogger: Send + Sync {
     async fn end_test_run(&mut self) -> anyhow::Result<ResultStreamLoggerResult>;
-    async fn log_result_stream_record(&mut self, record: &ResultStreamRecord) -> anyhow::Result<()>;
+    async fn log_result_stream_record(&mut self, record: &ResultStreamRecord)
+        -> anyhow::Result<()>;
 }
 
 #[async_trait]
@@ -77,25 +78,48 @@ impl ResultStreamLogger for Box<dyn ResultStreamLogger + Send + Sync> {
     async fn end_test_run(&mut self) -> anyhow::Result<ResultStreamLoggerResult> {
         (**self).end_test_run().await
     }
-    async fn log_result_stream_record(&mut self, record: &ResultStreamRecord) -> anyhow::Result<()> {
+    async fn log_result_stream_record(
+        &mut self,
+        record: &ResultStreamRecord,
+    ) -> anyhow::Result<()> {
         (**self).log_result_stream_record(record).await
     }
 }
 
-pub async fn create_result_stream_logger(test_run_query_id: TestRunQueryId, config: &ResultStreamLoggerConfig, output_storage: &TestRunQueryStorage) -> anyhow::Result<Box<dyn ResultStreamLogger + Send + Sync>> {
+pub async fn create_result_stream_logger(
+    test_run_query_id: TestRunQueryId,
+    config: &ResultStreamLoggerConfig,
+    output_storage: &TestRunQueryStorage,
+) -> anyhow::Result<Box<dyn ResultStreamLogger + Send + Sync>> {
     match config {
-        ResultStreamLoggerConfig::Console(cfg) => ConsoleResultStreamLogger::new(test_run_query_id, cfg),
-        ResultStreamLoggerConfig::JsonlFile(cfg) => JsonlFileResultStreamLogger::new(test_run_query_id, cfg, output_storage).await,
-        ResultStreamLoggerConfig::OtelMetric(cfg) => OtelMetricResultStreamLogger::new(test_run_query_id, cfg).await,
-        ResultStreamLoggerConfig::OtelTrace(cfg) => OtelTraceResultStreamLogger::new(test_run_query_id, cfg),
-        ResultStreamLoggerConfig::Profiler(cfg) => ProfilerResultStreamLogger::new(test_run_query_id, cfg, output_storage).await,
+        ResultStreamLoggerConfig::Console(cfg) => {
+            ConsoleResultStreamLogger::new(test_run_query_id, cfg)
+        }
+        ResultStreamLoggerConfig::JsonlFile(cfg) => {
+            JsonlFileResultStreamLogger::new(test_run_query_id, cfg, output_storage).await
+        }
+        ResultStreamLoggerConfig::OtelMetric(cfg) => {
+            OtelMetricResultStreamLogger::new(test_run_query_id, cfg).await
+        }
+        ResultStreamLoggerConfig::OtelTrace(cfg) => {
+            OtelTraceResultStreamLogger::new(test_run_query_id, cfg)
+        }
+        ResultStreamLoggerConfig::Profiler(cfg) => {
+            ProfilerResultStreamLogger::new(test_run_query_id, cfg, output_storage).await
+        }
     }
 }
 
-pub async fn create_result_stream_loggers(test_run_query_id: TestRunQueryId, configs: &Vec<ResultStreamLoggerConfig>, output_storage: &TestRunQueryStorage) -> anyhow::Result<Vec<Box<dyn ResultStreamLogger + Send + Sync>>> {
+pub async fn create_result_stream_loggers(
+    test_run_query_id: TestRunQueryId,
+    configs: &Vec<ResultStreamLoggerConfig>,
+    output_storage: &TestRunQueryStorage,
+) -> anyhow::Result<Vec<Box<dyn ResultStreamLogger + Send + Sync>>> {
     let mut result = Vec::new();
     for config in configs {
-        result.push(create_result_stream_logger(test_run_query_id.clone(), config, output_storage).await?);
+        result.push(
+            create_result_stream_logger(test_run_query_id.clone(), config, output_storage).await?,
+        );
     }
     Ok(result)
 }

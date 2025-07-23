@@ -21,7 +21,6 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize, Serializer};
-use utoipa::ToSchema;
 use serde_json::{json, Value};
 use test_data_store::{
     scripts::{NodeRecord, RelationRecord},
@@ -31,6 +30,7 @@ use test_run_host::{
     sources::{bootstrap_data_generators::BootstrapData, TestRunSourceConfig},
     TestRunHost, TestRunHostStatus,
 };
+use utoipa::ToSchema;
 
 use super::TestServiceWebApiError;
 

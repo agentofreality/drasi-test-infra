@@ -20,8 +20,8 @@ use serde::{Deserialize, Serialize};
 use test_data_store::{TestDataStore, TestDataStoreConfig};
 use test_run_host::{TestRunHost, TestRunHostConfig};
 
-mod web_api;
 mod openapi;
+mod web_api;
 
 // A struct to hold parameters obtained from env vars and/or command line arguments.
 // Command line args will override env vars. If neither is provided, default values are used.

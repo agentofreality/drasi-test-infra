@@ -35,14 +35,12 @@ impl FromStr for StartTimeMode {
         match s {
             "live" => Ok(Self::Live),
             "first_event" => Ok(Self::FirstEvent),
-            _ => {
-                match chrono::DateTime::parse_from_rfc3339(s) {
-                    Ok(t) => Ok(Self::Rebased(t.timestamp_nanos_opt().unwrap() as u64)),
-                    Err(e) => {
-                        anyhow::bail!("Error parsing StartTimeMode - value:{}, error:{}", s, e);
-                    }
+            _ => match chrono::DateTime::parse_from_rfc3339(s) {
+                Ok(t) => Ok(Self::Rebased(t.timestamp_nanos_opt().unwrap() as u64)),
+                Err(e) => {
+                    anyhow::bail!("Error parsing StartTimeMode - value:{}, error:{}", s, e);
                 }
-            }
+            },
         }
     }
 }
@@ -63,11 +61,10 @@ impl Default for StartTimeMode {
     }
 }
 
-
 #[derive(Debug, thiserror::Error)]
 pub enum SourceChangeEventLoggerError {
     Io(#[from] std::io::Error),
-    Serde(#[from]serde_json::Error),
+    Serde(#[from] serde_json::Error),
 }
 
 impl std::fmt::Display for SourceChangeEventLoggerError {
@@ -80,13 +77,19 @@ impl std::fmt::Display for SourceChangeEventLoggerError {
 }
 
 #[async_trait]
-pub trait SourceChangeEventLogger : Send + Sync {
-    async fn log_source_change_events(&mut self, events: Vec<&SourceChangeEvent>) -> anyhow::Result<()>;
+pub trait SourceChangeEventLogger: Send + Sync {
+    async fn log_source_change_events(
+        &mut self,
+        events: Vec<&SourceChangeEvent>,
+    ) -> anyhow::Result<()>;
 }
 
 #[async_trait]
 impl SourceChangeEventLogger for Box<dyn SourceChangeEventLogger + Send + Sync> {
-    async fn log_source_change_events(&mut self, events: Vec<&SourceChangeEvent>) -> anyhow::Result<()> {
+    async fn log_source_change_events(
+        &mut self,
+        events: Vec<&SourceChangeEvent>,
+    ) -> anyhow::Result<()> {
         (**self).log_source_change_events(events).await
     }
 }

@@ -66,8 +66,8 @@ impl TryFrom<&str> for TestRunId {
         let parts: Vec<&str> = value.split('.').collect();
         if parts.len() == 3 {
             Ok(Self {
-                test_repo_id: parts[0].to_string(), 
-                test_id: parts[1].to_string(), 
+                test_repo_id: parts[0].to_string(),
+                test_id: parts[1].to_string(),
                 test_run_id: parts[2].to_string(),
             })
         } else {
@@ -93,11 +93,7 @@ impl TestRunSourceId {
 
 impl fmt::Display for TestRunSourceId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}.{}",
-            self.test_run_id, self.test_source_id
-        )
+        write!(f, "{}.{}", self.test_run_id, self.test_source_id)
     }
 }
 
@@ -142,11 +138,7 @@ impl TestRunQueryId {
 
 impl fmt::Display for TestRunQueryId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}.{}",
-            self.test_run_id, self.test_query_id
-        )
+        write!(f, "{}.{}", self.test_run_id, self.test_query_id)
     }
 }
 
@@ -180,10 +172,17 @@ pub struct TestRunStore {
 }
 
 impl TestRunStore {
-    pub async fn new(folder_name: String, parent_path: PathBuf, replace: bool) -> anyhow::Result<Self> {
-
+    pub async fn new(
+        folder_name: String,
+        parent_path: PathBuf,
+        replace: bool,
+    ) -> anyhow::Result<Self> {
         let path = parent_path.join(&folder_name);
-        log::debug!("Creating (replace = {}) TestRunStore in folder: {:?}", replace, &path);
+        log::debug!(
+            "Creating (replace = {}) TestRunStore in folder: {:?}",
+            replace,
+            &path
+        );
 
         if replace && path.exists() {
             fs::remove_dir_all(&path).await?;
@@ -193,9 +192,7 @@ impl TestRunStore {
             fs::create_dir_all(&path).await?;
         }
 
-        Ok(Self {
-            path,
-        })
+        Ok(Self { path })
     }
 
     pub async fn contains_test_run(&self, test_run_id: &TestRunId) -> anyhow::Result<bool> {
@@ -205,7 +202,7 @@ impl TestRunStore {
     pub async fn get_test_run_ids(&self) -> anyhow::Result<Vec<TestRunId>> {
         let mut test_run_ids = Vec::new();
 
-        let mut entries = fs::read_dir(&self.path).await?;     
+        let mut entries = fs::read_dir(&self.path).await?;
         while let Some(entry) = entries.next_entry().await? {
             let metadata = entry.metadata().await?;
             if metadata.is_dir() {
@@ -216,10 +213,18 @@ impl TestRunStore {
         }
 
         Ok(test_run_ids)
-    }    
+    }
 
-    pub async fn get_test_run_storage(&self, test_run_id: &TestRunId, replace: bool) -> anyhow::Result<TestRunStorage> {
-        log::debug!("Getting (replace = {}) TestRunStorage for ID: {:?}", replace, &test_run_id);
+    pub async fn get_test_run_storage(
+        &self,
+        test_run_id: &TestRunId,
+        replace: bool,
+    ) -> anyhow::Result<TestRunStorage> {
+        log::debug!(
+            "Getting (replace = {}) TestRunStorage for ID: {:?}",
+            replace,
+            &test_run_id
+        );
 
         let test_run_path = self.path.join(test_run_id.to_string());
         let queries_path = test_run_path.join(QUERIES_FOLDER_NAME);
@@ -245,13 +250,21 @@ impl TestRunStore {
 pub struct TestRunStorage {
     pub id: TestRunId,
     pub path: PathBuf,
-    pub queries_path: PathBuf,    
+    pub queries_path: PathBuf,
     pub sources_path: PathBuf,
 }
 
 impl TestRunStorage {
-    pub async fn get_query_storage(&self, query_id: &TestRunQueryId, replace: bool) -> anyhow::Result<TestRunQueryStorage> {
-        log::debug!("Getting (replace = {}) TestRunQueryStorage for ID: {:?}", replace, query_id);
+    pub async fn get_query_storage(
+        &self,
+        query_id: &TestRunQueryId,
+        replace: bool,
+    ) -> anyhow::Result<TestRunQueryStorage> {
+        log::debug!(
+            "Getting (replace = {}) TestRunQueryStorage for ID: {:?}",
+            replace,
+            query_id
+        );
 
         let query_path = self.queries_path.join(&query_id.test_query_id);
         let result_change_path = query_path.join(QUERY_RESULT_LOG_FOLDER_NAME);
@@ -274,7 +287,7 @@ impl TestRunStorage {
     pub async fn get_query_ids(&self) -> anyhow::Result<Vec<TestRunQueryId>> {
         let mut test_run_queries = Vec::new();
 
-        let mut entries = fs::read_dir(&self.path).await?;     
+        let mut entries = fs::read_dir(&self.path).await?;
         while let Some(entry) = entries.next_entry().await? {
             let metadata = entry.metadata().await?;
             if metadata.is_dir() {
@@ -283,11 +296,19 @@ impl TestRunStorage {
                 }
             }
         }
-        Ok(test_run_queries)        
+        Ok(test_run_queries)
     }
 
-    pub async fn get_source_storage(&self, source_id: &TestRunSourceId, replace: bool) -> anyhow::Result<TestRunSourceStorage> {
-        log::debug!("Getting (replace = {}) TestRunSourceStorage for ID: {:?}", replace, source_id);
+    pub async fn get_source_storage(
+        &self,
+        source_id: &TestRunSourceId,
+        replace: bool,
+    ) -> anyhow::Result<TestRunSourceStorage> {
+        log::debug!(
+            "Getting (replace = {}) TestRunSourceStorage for ID: {:?}",
+            replace,
+            source_id
+        );
 
         let source_path = self.sources_path.join(&source_id.test_source_id);
         let source_change_path = source_path.join(SOURCE_CHANGE_LOG_FOLDER_NAME);
@@ -311,7 +332,7 @@ impl TestRunStorage {
     pub async fn get_source_ids(&self) -> anyhow::Result<Vec<TestRunSourceId>> {
         let mut test_run_sources = Vec::new();
 
-        let mut entries = fs::read_dir(&self.path).await?;     
+        let mut entries = fs::read_dir(&self.path).await?;
         while let Some(entry) = entries.next_entry().await? {
             let metadata = entry.metadata().await?;
             if metadata.is_dir() {
@@ -320,7 +341,7 @@ impl TestRunStorage {
                 }
             }
         }
-        Ok(test_run_sources)        
+        Ok(test_run_sources)
     }
 }
 

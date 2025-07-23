@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use utoipa::{OpenApi, ToSchema};
 use serde::Serialize;
 #[allow(unused_imports)]
 use serde_json::json;
+use utoipa::{OpenApi, ToSchema};
 
 use crate::web_api::{
-    queries, repo, sources,
-    TestServiceStateResponse, TestDataStoreStateResponse, TestRunHostStateResponse, DataCollectorStateResponse
+    queries, repo, sources, DataCollectorStateResponse, TestDataStoreStateResponse,
+    TestRunHostStateResponse, TestServiceStateResponse,
 };
 
 /// Standard error response for all API endpoints

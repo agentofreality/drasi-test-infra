@@ -17,7 +17,9 @@ use async_trait::async_trait;
 use record_sequence_number::RecordSequenceNumberStopTrigger;
 use test_data_store::test_repo_storage::models::StopTriggerDefinition;
 
-use super::{query_result_observer::QueryResultObserverMetrics, result_stream_handlers::ResultStreamStatus};
+use super::{
+    query_result_observer::QueryResultObserverMetrics, result_stream_handlers::ResultStreamStatus,
+};
 
 pub mod record_sequence_number;
 
@@ -37,19 +39,31 @@ impl std::fmt::Display for StopTriggerError {
 }
 
 #[async_trait]
-pub trait StopTrigger : Send + Sync {
-    async fn is_true(&self, stream_status: &ResultStreamStatus, stats: &QueryResultObserverMetrics) -> anyhow::Result<bool>;
+pub trait StopTrigger: Send + Sync {
+    async fn is_true(
+        &self,
+        stream_status: &ResultStreamStatus,
+        stats: &QueryResultObserverMetrics,
+    ) -> anyhow::Result<bool>;
 }
 
 #[async_trait]
 impl StopTrigger for Box<dyn StopTrigger + Send + Sync> {
-    async fn is_true(&self, stream_status: &ResultStreamStatus, stats: &QueryResultObserverMetrics) -> anyhow::Result<bool> {
+    async fn is_true(
+        &self,
+        stream_status: &ResultStreamStatus,
+        stats: &QueryResultObserverMetrics,
+    ) -> anyhow::Result<bool> {
         (**self).is_true(stream_status, stats).await
     }
 }
 
-pub async fn create_stop_trigger(def: &StopTriggerDefinition) -> anyhow::Result<Box<dyn StopTrigger + Send + Sync>> {
+pub async fn create_stop_trigger(
+    def: &StopTriggerDefinition,
+) -> anyhow::Result<Box<dyn StopTrigger + Send + Sync>> {
     match def {
-        StopTriggerDefinition::RecordSequenceNumber(def) => RecordSequenceNumberStopTrigger::new(def),
+        StopTriggerDefinition::RecordSequenceNumber(def) => {
+            RecordSequenceNumberStopTrigger::new(def)
+        }
     }
 }
