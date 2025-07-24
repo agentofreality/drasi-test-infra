@@ -25,7 +25,7 @@ use tokio::fs::{create_dir_all, write};
 use test_data_store::test_run_storage::{TestRunQueryId, TestRunQueryStorage};
 
 use crate::queries::{
-    result_stream_handlers::ResultStreamRecord,
+    output_handler_message::{HandlerPayload, HandlerRecord},
     result_stream_record::{ChangeEvent, QueryResultRecord},
 };
 
@@ -184,11 +184,11 @@ struct BootstrapRecordProfile {
 }
 
 impl BootstrapRecordProfile {
-    pub fn new(record: &ResultStreamRecord, change: &ChangeEvent) -> Self {
+    pub fn new(record: &HandlerRecord, change: &ChangeEvent) -> Self {
         Self {
             seq: change.base.sequence,
             time_total: record
-                .dequeue_time_ns
+                .processed_time_ns
                 .saturating_sub((change.base.source_time_ms as u64) * 1_000_000),
         }
     }
@@ -217,10 +217,10 @@ struct ChangeRecordProfile {
 }
 
 impl ChangeRecordProfile {
-    pub fn new(record: &ResultStreamRecord, change: &ChangeEvent) -> Self {
+    pub fn new(record: &HandlerRecord, change: &ChangeEvent) -> Self {
         let metadata = &change.base.metadata.as_ref().unwrap().tracking;
 
-        let record_dequeue_time_ns = record.dequeue_time_ns;
+        let record_dequeue_time_ns = record.processed_time_ns;
         let time_in_query_solver = metadata
             .query
             .query_end_ns
@@ -502,7 +502,7 @@ impl ProfilerResultStreamLogger {
     // Process a bootstrap record
     async fn process_bootstrap_record(
         &mut self,
-        record: &ResultStreamRecord,
+        record: &HandlerRecord,
         change: &ChangeEvent,
     ) -> anyhow::Result<()> {
         let profile = BootstrapRecordProfile::new(record, change);
@@ -524,7 +524,7 @@ impl ProfilerResultStreamLogger {
     // Process a change record with metadata
     async fn process_change_record(
         &mut self,
-        record: &ResultStreamRecord,
+        record: &HandlerRecord,
         change: &ChangeEvent,
     ) -> anyhow::Result<()> {
         let profile = ChangeRecordProfile::new(record, change);
@@ -648,22 +648,22 @@ impl ResultStreamLogger for ProfilerResultStreamLogger {
         })
     }
 
-    async fn log_result_stream_record(
-        &mut self,
-        record: &ResultStreamRecord,
-    ) -> anyhow::Result<()> {
-        match &record.record_data {
-            QueryResultRecord::Change(change) => {
-                if change.base.metadata.is_some() {
-                    // Process change record with metadata
-                    self.process_change_record(record, change).await?;
-                } else {
-                    // Process bootstrap record
-                    self.process_bootstrap_record(record, change).await?;
+    async fn log_handler_record(&mut self, record: &HandlerRecord) -> anyhow::Result<()> {
+        // Only process ResultStream payloads
+        if let HandlerPayload::ResultStream { query_result } = &record.payload {
+            match query_result {
+                QueryResultRecord::Change(change) => {
+                    if change.base.metadata.is_some() {
+                        // Process change record with metadata
+                        self.process_change_record(record, change).await?;
+                    } else {
+                        // Process bootstrap record
+                        self.process_bootstrap_record(record, change).await?;
+                    }
                 }
-            }
-            QueryResultRecord::Control(_) => {
-                self.summary.control_rec_count += 1;
+                QueryResultRecord::Control(_) => {
+                    self.summary.control_rec_count += 1;
+                }
             }
         }
 

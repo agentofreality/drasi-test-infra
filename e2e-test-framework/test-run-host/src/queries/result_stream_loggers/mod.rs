@@ -24,7 +24,7 @@ use console_logger::{ConsoleResultStreamLogger, ConsoleResultStreamLoggerConfig}
 use jsonl_file_logger::{JsonlFileResultStreamLogger, JsonlFileResultStreamLoggerConfig};
 use test_data_store::test_run_storage::{TestRunQueryId, TestRunQueryStorage};
 
-use super::result_stream_handlers::ResultStreamRecord;
+use super::output_handler_message::HandlerRecord;
 
 pub mod console_logger;
 pub mod jsonl_file_logger;
@@ -69,8 +69,7 @@ pub struct ResultStreamLoggerResult {
 #[async_trait]
 pub trait ResultStreamLogger: Send + Sync {
     async fn end_test_run(&mut self) -> anyhow::Result<ResultStreamLoggerResult>;
-    async fn log_result_stream_record(&mut self, record: &ResultStreamRecord)
-        -> anyhow::Result<()>;
+    async fn log_handler_record(&mut self, record: &HandlerRecord) -> anyhow::Result<()>;
 }
 
 #[async_trait]
@@ -78,11 +77,8 @@ impl ResultStreamLogger for Box<dyn ResultStreamLogger + Send + Sync> {
     async fn end_test_run(&mut self) -> anyhow::Result<ResultStreamLoggerResult> {
         (**self).end_test_run().await
     }
-    async fn log_result_stream_record(
-        &mut self,
-        record: &ResultStreamRecord,
-    ) -> anyhow::Result<()> {
-        (**self).log_result_stream_record(record).await
+    async fn log_handler_record(&mut self, record: &HandlerRecord) -> anyhow::Result<()> {
+        (**self).log_handler_record(record).await
     }
 }
 

@@ -384,8 +384,11 @@ pub struct HttpSourceChangeDispatcherDefinition {
 pub struct TestQueryDefinition {
     #[serde(default)]
     pub test_query_id: String,
-    pub result_stream_handler: ResultStreamHandlerDefinition,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result_stream_handler: Option<ResultStreamHandlerDefinition>,
     pub stop_trigger: StopTriggerDefinition,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reaction_handler: Option<ReactionHandlerDefinition>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -415,11 +418,38 @@ pub struct RedisStreamResultStreamHandlerDefinition {
 #[serde(tag = "kind")]
 pub enum StopTriggerDefinition {
     RecordSequenceNumber(RecordSequenceNumberStopTriggerDefinition),
+    RecordCount(RecordCountStopTriggerDefinition),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RecordSequenceNumberStopTriggerDefinition {
     pub record_sequence_number: i64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RecordCountStopTriggerDefinition {
+    pub record_count: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "kind")]
+pub enum ReactionHandlerDefinition {
+    Http(HttpReactionHandlerDefinition),
+    EventGrid(EventGridReactionHandlerDefinition),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HttpReactionHandlerDefinition {
+    pub host: Option<String>,
+    pub port: Option<u16>,
+    pub path: Option<String>,
+    pub correlation_header: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EventGridReactionHandlerDefinition {
+    pub endpoint: Option<String>,
+    pub access_key: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]

@@ -18,7 +18,7 @@ use anyhow::Result;
 use tokio::fs::{File, OpenOptions};
 use tokio::io::AsyncWriteExt;
 
-use crate::queries::result_stream_handlers::ResultStreamRecord;
+use crate::queries::output_handler_message::HandlerRecord;
 use crate::queries::result_stream_record::ChangeEvent;
 
 // Component indices for the 2D array
@@ -62,7 +62,7 @@ impl RateTracker {
     }
 
     // Process a record and update all relevant components
-    pub fn process_record(&mut self, _record: &ResultStreamRecord, change: &ChangeEvent) {
+    pub fn process_record(&mut self, _record: &HandlerRecord, change: &ChangeEvent) {
         // Fixed window size of 1 second in nanoseconds
         const ONE_SECOND_NS: u64 = 1_000_000_000;
 

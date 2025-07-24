@@ -22,7 +22,7 @@ use tracing_subscriber::{layer::SubscriberExt, Registry};
 
 use test_data_store::test_run_storage::TestRunQueryId;
 
-use crate::queries::result_stream_handlers::ResultStreamRecord;
+use crate::queries::output_handler_message::{HandlerPayload, HandlerRecord};
 
 use super::{ResultStreamLogger, ResultStreamLoggerResult};
 
@@ -124,16 +124,16 @@ impl ResultStreamLogger for OtelTraceResultStreamLogger {
         })
     }
 
-    async fn log_result_stream_record(
-        &mut self,
-        record: &ResultStreamRecord,
-    ) -> anyhow::Result<()> {
-        create_span(&self.settings, record);
+    async fn log_handler_record(&mut self, record: &HandlerRecord) -> anyhow::Result<()> {
+        // Only process ResultStream payloads
+        if let HandlerPayload::ResultStream { .. } = &record.payload {
+            create_span(&self.settings, record);
+        }
         Ok(())
     }
 }
 
-fn create_span(settings: &OtelTraceResultStreamLoggerSettings, record: &ResultStreamRecord) {
+fn create_span(settings: &OtelTraceResultStreamLoggerSettings, record: &HandlerRecord) {
     // Extract the context using the API's global propagator
     let parent_context =
         opentelemetry_api::global::get_text_map_propagator(|propagator| propagator.extract(record));

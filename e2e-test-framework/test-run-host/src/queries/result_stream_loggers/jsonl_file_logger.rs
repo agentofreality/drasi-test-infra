@@ -24,7 +24,7 @@ use tokio::{
 
 use test_data_store::test_run_storage::{TestRunQueryId, TestRunQueryStorage};
 
-use crate::queries::result_stream_handlers::ResultStreamRecord;
+use crate::queries::output_handler_message::HandlerRecord;
 
 use super::{ResultStreamLogger, ResultStreamLoggerError, ResultStreamLoggerResult};
 
@@ -108,10 +108,7 @@ impl ResultStreamLogger for JsonlFileResultStreamLogger {
         })
     }
 
-    async fn log_result_stream_record(
-        &mut self,
-        record: &ResultStreamRecord,
-    ) -> anyhow::Result<()> {
+    async fn log_handler_record(&mut self, record: &HandlerRecord) -> anyhow::Result<()> {
         self.writer.write_record(record).await?;
         Ok(())
     }
@@ -149,7 +146,7 @@ impl ResultStreamRecordLogWriter {
         Ok(writer)
     }
 
-    pub async fn write_record(&mut self, event: &ResultStreamRecord) -> anyhow::Result<()> {
+    pub async fn write_record(&mut self, event: &HandlerRecord) -> anyhow::Result<()> {
         if let Some(writer) = &mut self.current_writer {
             let json = format!(
                 "{}\n",

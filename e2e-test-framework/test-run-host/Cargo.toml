@@ -10,6 +10,7 @@ test-data-store = { path = "../test-data-store" }
 
 anyhow = "1.0.86"
 async-trait = "0.1.81"
+axum = "0.6.19"
 azure_core = "0.20.0"
 azure_storage = "0.20.0"
 azure_storage_blobs = "0.20.0"
