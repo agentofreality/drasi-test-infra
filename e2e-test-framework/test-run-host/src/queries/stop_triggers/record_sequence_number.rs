@@ -18,7 +18,7 @@ use async_trait::async_trait;
 use test_data_store::test_repo_storage::models::RecordSequenceNumberStopTriggerDefinition;
 
 use crate::queries::{
-    query_result_observer::QueryResultObserverMetrics, result_stream_handlers::ResultStreamStatus,
+    query_result_observer::QueryResultObserverMetrics, unified_handler::UnifiedHandlerStatus,
 };
 
 use super::StopTrigger;
@@ -61,7 +61,7 @@ impl RecordSequenceNumberStopTrigger {
 impl StopTrigger for RecordSequenceNumberStopTrigger {
     async fn is_true(
         &self,
-        _stream_status: &ResultStreamStatus,
+        _handler_status: &UnifiedHandlerStatus,
         stats: &QueryResultObserverMetrics,
     ) -> anyhow::Result<bool> {
         Ok(stats.result_stream_record_seq >= self.settings.record_sequence_number)

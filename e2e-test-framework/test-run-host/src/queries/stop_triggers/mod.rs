@@ -14,13 +14,15 @@
 
 use async_trait::async_trait;
 
+use record_count::RecordCountStopTrigger;
 use record_sequence_number::RecordSequenceNumberStopTrigger;
 use test_data_store::test_repo_storage::models::StopTriggerDefinition;
 
 use super::{
-    query_result_observer::QueryResultObserverMetrics, result_stream_handlers::ResultStreamStatus,
+    query_result_observer::QueryResultObserverMetrics, unified_handler::UnifiedHandlerStatus,
 };
 
+pub mod record_count;
 pub mod record_sequence_number;
 
 #[derive(Debug, thiserror::Error)]
@@ -42,7 +44,7 @@ impl std::fmt::Display for StopTriggerError {
 pub trait StopTrigger: Send + Sync {
     async fn is_true(
         &self,
-        stream_status: &ResultStreamStatus,
+        handler_status: &UnifiedHandlerStatus,
         stats: &QueryResultObserverMetrics,
     ) -> anyhow::Result<bool>;
 }
@@ -51,10 +53,10 @@ pub trait StopTrigger: Send + Sync {
 impl StopTrigger for Box<dyn StopTrigger + Send + Sync> {
     async fn is_true(
         &self,
-        stream_status: &ResultStreamStatus,
+        handler_status: &UnifiedHandlerStatus,
         stats: &QueryResultObserverMetrics,
     ) -> anyhow::Result<bool> {
-        (**self).is_true(stream_status, stats).await
+        (**self).is_true(handler_status, stats).await
     }
 }
 
@@ -65,5 +67,6 @@ pub async fn create_stop_trigger(
         StopTriggerDefinition::RecordSequenceNumber(def) => {
             RecordSequenceNumberStopTrigger::new(def)
         }
+        StopTriggerDefinition::RecordCount(def) => RecordCountStopTrigger::new(def),
     }
 }

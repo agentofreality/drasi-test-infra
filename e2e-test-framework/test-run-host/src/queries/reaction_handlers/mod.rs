@@ -13,50 +13,47 @@
 // limitations under the License.
 
 use async_trait::async_trait;
-use redis_result_stream_handler::RedisResultStreamHandler;
+use http_reaction_handler::HttpReactionHandler;
 use serde::Serialize;
 use tokio::sync::mpsc::Receiver;
 
 use test_data_store::{
-    test_repo_storage::models::ResultStreamHandlerDefinition, test_run_storage::TestRunQueryId,
+    test_repo_storage::models::ReactionHandlerDefinition, test_run_storage::TestRunQueryId,
 };
 
 use super::output_handler_message::OutputHandlerMessage;
 
-pub mod redis_result_stream_handler;
+pub mod http_reaction_handler;
+
+// Re-export types from output_handler_message
+pub use super::output_handler_message::{HandlerError, HandlerType};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum ResultStreamHandlerStatus {
-    Unknown,
-    BootstrapStarted,
-    BootstrapComplete,
+pub enum ReactionHandlerStatus {
+    Uninitialized,
     Running,
+    Paused,
     Stopped,
-    Deleted,
+    Error,
 }
 
-impl Serialize for ResultStreamHandlerStatus {
+impl Serialize for ReactionHandlerStatus {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
         match self {
-            ResultStreamHandlerStatus::Unknown => serializer.serialize_str("Unknown"),
-            ResultStreamHandlerStatus::BootstrapStarted => {
-                serializer.serialize_str("BootstrapStarted")
-            }
-            ResultStreamHandlerStatus::BootstrapComplete => {
-                serializer.serialize_str("BootstrapComplete")
-            }
-            ResultStreamHandlerStatus::Running => serializer.serialize_str("Running"),
-            ResultStreamHandlerStatus::Stopped => serializer.serialize_str("Stopped"),
-            ResultStreamHandlerStatus::Deleted => serializer.serialize_str("Deleted"),
+            ReactionHandlerStatus::Uninitialized => serializer.serialize_str("Uninitialized"),
+            ReactionHandlerStatus::Running => serializer.serialize_str("Running"),
+            ReactionHandlerStatus::Paused => serializer.serialize_str("Paused"),
+            ReactionHandlerStatus::Stopped => serializer.serialize_str("Stopped"),
+            ReactionHandlerStatus::Error => serializer.serialize_str("Error"),
         }
     }
 }
 
 #[async_trait]
-pub trait ResultStreamHandler: Send + Sync {
+pub trait ReactionHandler: Send + Sync {
     async fn init(&self) -> anyhow::Result<Receiver<OutputHandlerMessage>>;
     async fn pause(&self) -> anyhow::Result<()>;
     async fn start(&self) -> anyhow::Result<()>;
@@ -64,7 +61,7 @@ pub trait ResultStreamHandler: Send + Sync {
 }
 
 #[async_trait]
-impl ResultStreamHandler for Box<dyn ResultStreamHandler + Send + Sync> {
+impl ReactionHandler for Box<dyn ReactionHandler + Send + Sync> {
     async fn init(&self) -> anyhow::Result<Receiver<OutputHandlerMessage>> {
         (**self).init().await
     }
@@ -82,16 +79,16 @@ impl ResultStreamHandler for Box<dyn ResultStreamHandler + Send + Sync> {
     }
 }
 
-pub async fn create_result_stream_handler(
+pub async fn create_reaction_handler(
     id: TestRunQueryId,
-    definition: ResultStreamHandlerDefinition,
+    definition: ReactionHandlerDefinition,
 ) -> anyhow::Result<Box<dyn crate::queries::unified_handler::OutputHandler + Send + Sync>> {
     match definition {
-        ResultStreamHandlerDefinition::RedisStream(definition) => {
-            RedisResultStreamHandler::new(id, definition).await
+        ReactionHandlerDefinition::Http(definition) => {
+            HttpReactionHandler::new(id, definition).await
         }
-        ResultStreamHandlerDefinition::DaprPubSub(_) => {
-            unimplemented!("DaprResultStreamHandler is not implemented yet")
+        ReactionHandlerDefinition::EventGrid(_) => {
+            unimplemented!("EventGridReactionHandler is not implemented yet")
         }
     }
 }

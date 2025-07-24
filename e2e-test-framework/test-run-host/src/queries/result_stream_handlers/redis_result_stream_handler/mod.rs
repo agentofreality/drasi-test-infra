@@ -36,9 +36,9 @@ use tokio::sync::{
     Notify, RwLock,
 };
 
-use super::{
-    ResultStreamHandler, ResultStreamHandlerError, ResultStreamHandlerMessage,
-    ResultStreamHandlerStatus,
+use crate::queries::{
+    output_handler_message::{HandlerError, HandlerType, OutputHandlerMessage},
+    unified_handler::{OutputHandler, UnifiedHandlerStatus},
 };
 
 pub mod redis_stream_read_result;
@@ -81,7 +81,7 @@ pub struct RedisResultStreamHandler {
     notifier: Arc<Notify>,
     seq: Arc<AtomicUsize>,
     settings: RedisResultStreamHandlerSettings,
-    status: Arc<RwLock<ResultStreamHandlerStatus>>,
+    status: Arc<RwLock<UnifiedHandlerStatus>>,
 }
 
 impl RedisResultStreamHandler {
@@ -89,7 +89,7 @@ impl RedisResultStreamHandler {
     pub async fn new(
         id: TestRunQueryId,
         definition: RedisStreamResultStreamHandlerDefinition,
-    ) -> anyhow::Result<Box<dyn ResultStreamHandler + Send + Sync>> {
+    ) -> anyhow::Result<Box<dyn OutputHandler + Send + Sync>> {
         let settings = RedisResultStreamHandlerSettings::new(id, definition)?;
         log::trace!(
             "Creating RedisResultStreamHandler with settings {:?}",
@@ -97,7 +97,7 @@ impl RedisResultStreamHandler {
         );
 
         let notifier = Arc::new(Notify::new());
-        let status = Arc::new(RwLock::new(ResultStreamHandlerStatus::Uninitialized));
+        let status = Arc::new(RwLock::new(UnifiedHandlerStatus::Uninitialized));
 
         Ok(Box::new(Self {
             notifier,
@@ -109,16 +109,16 @@ impl RedisResultStreamHandler {
 }
 
 #[async_trait]
-impl ResultStreamHandler for RedisResultStreamHandler {
-    async fn init(&self) -> anyhow::Result<Receiver<ResultStreamHandlerMessage>> {
+impl OutputHandler for RedisResultStreamHandler {
+    async fn init(&self) -> anyhow::Result<Receiver<OutputHandlerMessage>> {
         log::debug!("Initializing RedisResultStreamHandler");
 
         if let Ok(mut status) = self.status.try_write() {
             match *status {
-                ResultStreamHandlerStatus::Uninitialized => {
+                UnifiedHandlerStatus::Uninitialized => {
                     let (handler_tx_channel, handler_rx_channel) = tokio::sync::mpsc::channel(100);
 
-                    *status = ResultStreamHandlerStatus::Paused;
+                    *status = UnifiedHandlerStatus::Paused;
 
                     tokio::spawn(reader_thread(
                         self.seq.clone(),
@@ -130,17 +130,22 @@ impl ResultStreamHandler for RedisResultStreamHandler {
 
                     Ok(handler_rx_channel)
                 }
-                ResultStreamHandlerStatus::Running => {
+                UnifiedHandlerStatus::Running => {
                     anyhow::bail!("Cant Init Handler, Handler currently Running");
                 }
-                ResultStreamHandlerStatus::Paused => {
+                UnifiedHandlerStatus::Paused => {
                     anyhow::bail!("Cant Init Handler, Handler currently Paused");
                 }
-                ResultStreamHandlerStatus::Stopped => {
+                UnifiedHandlerStatus::Stopped => {
                     anyhow::bail!("Cant Init Handler, Handler currently Stopped");
                 }
-                ResultStreamHandlerStatus::Error => {
+                UnifiedHandlerStatus::Error => {
                     anyhow::bail!("Handler in Error state");
+                }
+                UnifiedHandlerStatus::BootstrapStarted
+                | UnifiedHandlerStatus::BootstrapComplete
+                | UnifiedHandlerStatus::Deleted => {
+                    anyhow::bail!("Handler in invalid state for init: {:?}", *status);
                 }
             }
         } else {
@@ -153,20 +158,25 @@ impl ResultStreamHandler for RedisResultStreamHandler {
 
         if let Ok(mut status) = self.status.try_write() {
             match *status {
-                ResultStreamHandlerStatus::Uninitialized => {
+                UnifiedHandlerStatus::Uninitialized => {
                     anyhow::bail!("Can't Start Handler, Handler Uninitialized");
                 }
-                ResultStreamHandlerStatus::Running => Ok(()),
-                ResultStreamHandlerStatus::Paused => {
-                    *status = ResultStreamHandlerStatus::Running;
+                UnifiedHandlerStatus::Running => Ok(()),
+                UnifiedHandlerStatus::Paused => {
+                    *status = UnifiedHandlerStatus::Running;
                     self.notifier.notify_one();
                     Ok(())
                 }
-                ResultStreamHandlerStatus::Stopped => {
+                UnifiedHandlerStatus::Stopped => {
                     anyhow::bail!("Cant Start Handler, Handler already Stopped");
                 }
-                ResultStreamHandlerStatus::Error => {
+                UnifiedHandlerStatus::Error => {
                     anyhow::bail!("Handler in Error state");
+                }
+                UnifiedHandlerStatus::BootstrapStarted
+                | UnifiedHandlerStatus::BootstrapComplete
+                | UnifiedHandlerStatus::Deleted => {
+                    anyhow::bail!("Handler in invalid state for start: {:?}", *status);
                 }
             }
         } else {
@@ -179,19 +189,24 @@ impl ResultStreamHandler for RedisResultStreamHandler {
 
         if let Ok(mut status) = self.status.try_write() {
             match *status {
-                ResultStreamHandlerStatus::Uninitialized => {
+                UnifiedHandlerStatus::Uninitialized => {
                     anyhow::bail!("Cant Pause Handler, Handler Uninitialized");
                 }
-                ResultStreamHandlerStatus::Running => {
-                    *status = ResultStreamHandlerStatus::Paused;
+                UnifiedHandlerStatus::Running => {
+                    *status = UnifiedHandlerStatus::Paused;
                     Ok(())
                 }
-                ResultStreamHandlerStatus::Paused => Ok(()),
-                ResultStreamHandlerStatus::Stopped => {
+                UnifiedHandlerStatus::Paused => Ok(()),
+                UnifiedHandlerStatus::Stopped => {
                     anyhow::bail!("Cant Pause Handler, Handler already Stopped");
                 }
-                ResultStreamHandlerStatus::Error => {
+                UnifiedHandlerStatus::Error => {
                     anyhow::bail!("Handler in Error state");
+                }
+                UnifiedHandlerStatus::BootstrapStarted
+                | UnifiedHandlerStatus::BootstrapComplete
+                | UnifiedHandlerStatus::Deleted => {
+                    anyhow::bail!("Handler in invalid state for pause: {:?}", *status);
                 }
             }
         } else {
@@ -204,35 +219,44 @@ impl ResultStreamHandler for RedisResultStreamHandler {
 
         if let Ok(mut status) = self.status.try_write() {
             match *status {
-                ResultStreamHandlerStatus::Uninitialized => {
+                UnifiedHandlerStatus::Uninitialized => {
                     anyhow::bail!("Handler not initialized, current status: Uninitialized");
                 }
-                ResultStreamHandlerStatus::Running => {
-                    *status = ResultStreamHandlerStatus::Stopped;
+                UnifiedHandlerStatus::Running => {
+                    *status = UnifiedHandlerStatus::Stopped;
                     Ok(())
                 }
-                ResultStreamHandlerStatus::Paused => {
-                    *status = ResultStreamHandlerStatus::Stopped;
+                UnifiedHandlerStatus::Paused => {
+                    *status = UnifiedHandlerStatus::Stopped;
                     self.notifier.notify_one();
                     Ok(())
                 }
-                ResultStreamHandlerStatus::Stopped => Ok(()),
-                ResultStreamHandlerStatus::Error => {
+                UnifiedHandlerStatus::Stopped => Ok(()),
+                UnifiedHandlerStatus::Error => {
                     anyhow::bail!("Handler in Error state");
+                }
+                UnifiedHandlerStatus::BootstrapStarted
+                | UnifiedHandlerStatus::BootstrapComplete
+                | UnifiedHandlerStatus::Deleted => {
+                    anyhow::bail!("Handler in invalid state for stop: {:?}", *status);
                 }
             }
         } else {
             anyhow::bail!("Could not acquire status lock");
         }
     }
+
+    async fn status(&self) -> UnifiedHandlerStatus {
+        *self.status.read().await
+    }
 }
 
 async fn reader_thread(
     seq: Arc<AtomicUsize>,
     settings: RedisResultStreamHandlerSettings,
-    status: Arc<RwLock<ResultStreamHandlerStatus>>,
+    status: Arc<RwLock<UnifiedHandlerStatus>>,
     notify: Arc<Notify>,
-    result_stream_handler_tx_channel: Sender<ResultStreamHandlerMessage>,
+    result_stream_handler_tx_channel: Sender<OutputHandlerMessage>,
 ) {
     log::debug!("Starting RedisResultStreamHandler Reader Thread");
 
@@ -247,11 +271,12 @@ async fn reader_thread(
         Err(e) => {
             let msg = format!("Client creation error: {:?}", e);
             log::error!("{}", &msg);
-            *status.write().await = ResultStreamHandlerStatus::Error;
+            *status.write().await = UnifiedHandlerStatus::Error;
             match result_stream_handler_tx_channel
-                .send(ResultStreamHandlerMessage::Error(
-                    ResultStreamHandlerError::RedisError(e),
-                ))
+                .send(OutputHandlerMessage::Error {
+                    handler_type: HandlerType::ResultStream,
+                    error: HandlerError::RedisError(e),
+                })
                 .await
             {
                 Ok(_) => {}
@@ -273,11 +298,12 @@ async fn reader_thread(
         Err(e) => {
             let msg = format!("Connection Error: {:?}", e);
             log::error!("{}", &msg);
-            *status.write().await = ResultStreamHandlerStatus::Error;
+            *status.write().await = UnifiedHandlerStatus::Error;
             match result_stream_handler_tx_channel
-                .send(ResultStreamHandlerMessage::Error(
-                    ResultStreamHandlerError::RedisError(e),
-                ))
+                .send(OutputHandlerMessage::Error {
+                    handler_type: HandlerType::ResultStream,
+                    error: HandlerError::RedisError(e),
+                })
                 .await
             {
                 Ok(_) => {}
@@ -307,17 +333,19 @@ async fn reader_thread(
         };
 
         match current_status {
-            ResultStreamHandlerStatus::Uninitialized | ResultStreamHandlerStatus::Error => {
+            UnifiedHandlerStatus::Uninitialized | UnifiedHandlerStatus::Error => {
                 log::error!("Reader thread Uninitialized or Error, shutting down");
                 return;
             }
-            ResultStreamHandlerStatus::Stopped => {
+            UnifiedHandlerStatus::Stopped => {
                 log::debug!(
                     "Reader thread Stopped, sending StreamStopping message and shutting down"
                 );
 
                 match result_stream_handler_tx_channel
-                    .send(ResultStreamHandlerMessage::StreamStopping)
+                    .send(OutputHandlerMessage::HandlerStopping {
+                        handler_type: HandlerType::ResultStream,
+                    })
                     .await
                 {
                     Ok(_) => {}
@@ -330,12 +358,15 @@ async fn reader_thread(
                 }
                 return;
             }
-            ResultStreamHandlerStatus::Paused => {
+            UnifiedHandlerStatus::Paused => {
                 log::debug!("Reader thread Paused, waiting to be notified");
                 notify.notified().await;
                 log::debug!("Notified");
             }
-            ResultStreamHandlerStatus::Running => {
+            UnifiedHandlerStatus::Running
+            | UnifiedHandlerStatus::BootstrapStarted
+            | UnifiedHandlerStatus::BootstrapComplete
+            | UnifiedHandlerStatus::Deleted => {
                 let read_result =
                     read_stream(&mut con, seq.clone(), stream_key, &stream_last_id, &opts).await;
                 match read_result {
@@ -343,16 +374,18 @@ async fn reader_thread(
                         for result in results {
                             stream_last_id = result.id.clone();
 
-                            let result_stream_handler_message: ResultStreamHandlerMessage =
-                                match result.try_into() {
-                                    Ok(msg) => msg,
-                                    Err(e) => {
-                                        log::error!("Error converting RedisStreamReadResult to ResultStreamHandlerMessage: {:?}", e);
-                                        ResultStreamHandlerMessage::Error(
-                                            ResultStreamHandlerError::ConversionError,
-                                        )
+                            let result_stream_handler_message: OutputHandlerMessage = match result
+                                .try_into()
+                            {
+                                Ok(msg) => msg,
+                                Err(e) => {
+                                    log::error!("Error converting RedisStreamReadResult to UnifiedHandlerMessage: {:?}", e);
+                                    OutputHandlerMessage::Error {
+                                        handler_type: HandlerType::ResultStream,
+                                        error: HandlerError::ConversionError,
                                     }
-                                };
+                                }
+                            };
 
                             match result_stream_handler_tx_channel
                                 .send(result_stream_handler_message)
@@ -433,7 +466,7 @@ async fn read_stream(
                                         enqueue_time_ns,
                                         dequeue_time_ns,
                                         record: None,
-                                        error: Some(ResultStreamHandlerError::InvalidStreamData),
+                                        error: Some(HandlerError::InvalidStreamData),
                                     });
                                 }
                             },
@@ -445,7 +478,7 @@ async fn read_stream(
                                     enqueue_time_ns,
                                     dequeue_time_ns,
                                     record: None,
-                                    error: Some(ResultStreamHandlerError::InvalidStreamData),
+                                    error: Some(HandlerError::InvalidStreamData),
                                 });
                             }
                         }
@@ -458,7 +491,7 @@ async fn read_stream(
                             enqueue_time_ns,
                             dequeue_time_ns,
                             record: None,
-                            error: Some(ResultStreamHandlerError::InvalidStreamData),
+                            error: Some(HandlerError::InvalidStreamData),
                         });
                     }
                 },
@@ -470,7 +503,7 @@ async fn read_stream(
                         enqueue_time_ns,
                         dequeue_time_ns,
                         record: None,
-                        error: Some(ResultStreamHandlerError::InvalidStreamData),
+                        error: Some(HandlerError::InvalidStreamData),
                     });
                 }
             };
