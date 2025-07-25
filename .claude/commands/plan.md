@@ -1,15 +1,25 @@
 # Plan Command
 
-Create a structured work plan and save it to the todo folder.
+Create a structured work plan based on the provided prompt and save it to the .plans folder WITHOUT executing any tasks.
 
 ## Usage
-/plan <filename>
+/plan <filename> <prompt>
+
+Example: `/plan refactor-auth "Refactor the authentication system to use JWT tokens instead of sessions"`
+
+## IMPORTANT: DO NOT EXECUTE ANY TASKS
+This command should ONLY create a plan file. Do NOT:
+- Execute any code
+- Make any changes to the codebase
+- Run any commands
+- Use any tools except Read (for understanding context) and Write (to save the plan)
 
 ## Instructions
 
-1. Analyze the current context and user requirements
-2. Create a comprehensive work plan with clear, actionable tasks
-3. Save the plan to `todo/<filename>.md` with the following structure:
+1. Parse the provided prompt to understand what needs to be planned
+2. Use Read tool to gather context about relevant files/systems if needed
+3. Create a comprehensive work plan with clear, actionable tasks based on the prompt
+4. ONLY save the plan to `.plans/<filename>.md` with the following structure:
 
 ```markdown
 # Work Plan: <Title>
@@ -42,7 +52,14 @@ Brief description of the goal and scope
 - Required tools or resources
 ```
 
-3. Use the TodoWrite tool to track the main tasks from the plan
-4. Confirm the plan has been saved to `todo/<filename>.md`
+5. Ensure the `.plans` directory exists (create it if needed)
+6. Save the plan to `.plans/<filename>.md`
+7. Respond with: "Plan saved to .plans/<filename>.md" and a brief summary of what was planned
 
-The plan should be written in a way that's clear and executable by Claude Code when using the /work command.
+DO NOT:
+- Use the TodoWrite tool (that's for the /work command)
+- Start working on any tasks
+- Execute any part of the plan
+- Analyze unrelated context - focus only on the provided prompt
+
+The plan should be written in a way that's clear and executable by Claude Code when using the /work command later.

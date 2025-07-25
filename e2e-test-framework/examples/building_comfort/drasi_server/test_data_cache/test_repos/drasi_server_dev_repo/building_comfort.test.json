@@ -1,0 +1,137 @@
+{
+  "test_id": "building_comfort",
+  "version": 1,
+  "description": "",
+  "test_folder": "building_comfort",
+  "queries": [],
+  "reactions": [
+    {
+      "test_reaction_id": "building-comfort",
+      "output_handler": {
+        "kind": "Http",
+        "host": null,
+        "port": 9001,
+        "path": "/reaction",
+        "correlation_header": "X-Query-Sequence"
+      },
+      "stop_triggers": [
+        {
+          "kind": "RecordCount",
+          "record_count": 2
+        }
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "kind": "Model",
+      "test_source_id": "facilities-db",
+      "source_change_dispatchers": [
+        {
+          "kind": "Http",
+          "url": "http://localhost",
+          "port": 9000,
+          "endpoint": null,
+          "timeout_seconds": 60,
+          "batch_events": false
+        }
+      ],
+      "subscribers": [
+        {
+          "node_id": "default",
+          "query_id": "building-comfort"
+        }
+      ],
+      "model_data_generator": {
+        "kind": "BuildingHierarchy",
+        "change_count": 10,
+        "change_interval": [
+          2000000000,
+          500000000.0,
+          500000000,
+          4000000000
+        ],
+        "seed": 123456789,
+        "spacing_mode": "none",
+        "time_mode": "2025-01-03T10:03:15.400+00:00",
+        "building_count": [
+          10,
+          0.0
+        ],
+        "floor_count": [
+          10,
+          0.0
+        ],
+        "room_count": [
+          10,
+          0.0
+        ],
+        "room_sensors": [
+          {
+            "kind": "NormalFloat",
+            "id": "temperature",
+            "momentum_init": [
+              5,
+              1.0,
+              0.5
+            ],
+            "value_change": [
+              1.0,
+              0.5
+            ],
+            "value_init": [
+              72.0,
+              5.0
+            ],
+            "value_range": [
+              20.0,
+              110.0
+            ]
+          },
+          {
+            "kind": "NormalFloat",
+            "id": "co2",
+            "momentum_init": [
+              10,
+              1.0,
+              0.5
+            ],
+            "value_change": [
+              20.0,
+              5.0
+            ],
+            "value_init": [
+              100.0,
+              10.0
+            ],
+            "value_range": [
+              50.0,
+              1000.0
+            ]
+          },
+          {
+            "kind": "NormalFloat",
+            "id": "humidity",
+            "momentum_init": [
+              5,
+              1.0,
+              0.5
+            ],
+            "value_change": [
+              1.0,
+              0.5
+            ],
+            "value_init": [
+              42.0,
+              3.0
+            ],
+            "value_range": [
+              0.0,
+              100.0
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

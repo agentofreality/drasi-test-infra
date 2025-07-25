@@ -21,12 +21,9 @@ use test_data_store::{
     test_repo_storage::models::ReactionHandlerDefinition, test_run_storage::TestRunQueryId,
 };
 
-use super::output_handler_message::OutputHandlerMessage;
+use crate::common::OutputHandlerMessage;
 
 pub mod http_reaction_handler;
-
-// Re-export types from output_handler_message
-pub use super::output_handler_message::{HandlerError, HandlerType};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ReactionHandlerStatus {
@@ -82,7 +79,7 @@ impl ReactionHandler for Box<dyn ReactionHandler + Send + Sync> {
 pub async fn create_reaction_handler(
     id: TestRunQueryId,
     definition: ReactionHandlerDefinition,
-) -> anyhow::Result<Box<dyn crate::queries::unified_handler::OutputHandler + Send + Sync>> {
+) -> anyhow::Result<Box<dyn crate::reactions::ReactionOutputHandler + Send + Sync>> {
     match definition {
         ReactionHandlerDefinition::Http(definition) => {
             HttpReactionHandler::new(id, definition).await

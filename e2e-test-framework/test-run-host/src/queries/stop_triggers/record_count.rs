@@ -17,9 +17,7 @@ use async_trait::async_trait;
 
 use test_data_store::test_repo_storage::models::RecordCountStopTriggerDefinition;
 
-use crate::queries::{
-    query_result_observer::QueryResultObserverMetrics, unified_handler::UnifiedHandlerStatus,
-};
+use crate::queries::{query_result_observer::QueryResultObserverMetrics, QueryHandlerStatus};
 
 use super::StopTrigger;
 
@@ -61,7 +59,7 @@ impl RecordCountStopTrigger {
 impl StopTrigger for RecordCountStopTrigger {
     async fn is_true(
         &self,
-        _handler_status: &UnifiedHandlerStatus,
+        _handler_status: &QueryHandlerStatus,
         stats: &QueryResultObserverMetrics,
     ) -> anyhow::Result<bool> {
         let total_record_count =

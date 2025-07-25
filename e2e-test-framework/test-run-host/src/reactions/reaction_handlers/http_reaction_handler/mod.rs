@@ -30,11 +30,9 @@ use tokio::sync::{
     Notify, RwLock,
 };
 
-use crate::queries::{
-    output_handler_message::{
-        HandlerError, HandlerPayload, HandlerRecord, HandlerType, OutputHandlerMessage,
-    },
-    unified_handler::{OutputHandler, UnifiedHandlerStatus},
+use crate::reactions::reaction_output_handler::{
+    ReactionControlSignal, ReactionHandlerError, ReactionHandlerMessage, ReactionHandlerPayload,
+    ReactionHandlerStatus, ReactionHandlerType, ReactionInvocation, ReactionOutputHandler,
 };
 
 #[derive(Clone, Debug)]
@@ -69,14 +67,14 @@ impl HttpReactionHandlerSettings {
 
 #[derive(Clone)]
 struct HttpServerState {
-    tx: Sender<OutputHandlerMessage>,
+    tx: Sender<ReactionHandlerMessage>,
     settings: HttpReactionHandlerSettings,
 }
 
 pub struct HttpReactionHandler {
     notifier: Arc<Notify>,
     settings: HttpReactionHandlerSettings,
-    status: Arc<RwLock<UnifiedHandlerStatus>>,
+    status: Arc<RwLock<ReactionHandlerStatus>>,
     shutdown_notify: Arc<Notify>,
 }
 
@@ -85,12 +83,12 @@ impl HttpReactionHandler {
     pub async fn new(
         id: TestRunQueryId,
         definition: HttpReactionHandlerDefinition,
-    ) -> anyhow::Result<Box<dyn OutputHandler + Send + Sync>> {
+    ) -> anyhow::Result<Box<dyn ReactionOutputHandler + Send + Sync>> {
         let settings = HttpReactionHandlerSettings::new(id, definition)?;
         log::trace!("Creating HttpReactionHandler with settings {:?}", settings);
 
         let notifier = Arc::new(Notify::new());
-        let status = Arc::new(RwLock::new(UnifiedHandlerStatus::Uninitialized));
+        let status = Arc::new(RwLock::new(ReactionHandlerStatus::Uninitialized));
         let shutdown_notify = Arc::new(Notify::new());
 
         Ok(Box::new(Self {
@@ -103,16 +101,16 @@ impl HttpReactionHandler {
 }
 
 #[async_trait]
-impl OutputHandler for HttpReactionHandler {
-    async fn init(&self) -> anyhow::Result<Receiver<OutputHandlerMessage>> {
+impl ReactionOutputHandler for HttpReactionHandler {
+    async fn init(&self) -> anyhow::Result<Receiver<ReactionHandlerMessage>> {
         log::debug!("Initializing HttpReactionHandler");
 
         if let Ok(mut status) = self.status.try_write() {
             match *status {
-                UnifiedHandlerStatus::Uninitialized => {
+                ReactionHandlerStatus::Uninitialized => {
                     let (handler_tx_channel, handler_rx_channel) = tokio::sync::mpsc::channel(100);
 
-                    *status = UnifiedHandlerStatus::Paused;
+                    *status = ReactionHandlerStatus::Paused;
 
                     tokio::spawn(http_server_thread(
                         self.settings.clone(),
@@ -124,22 +122,17 @@ impl OutputHandler for HttpReactionHandler {
 
                     Ok(handler_rx_channel)
                 }
-                UnifiedHandlerStatus::Running => {
+                ReactionHandlerStatus::Running => {
                     anyhow::bail!("Can't Init Handler, Handler currently Running");
                 }
-                UnifiedHandlerStatus::Paused => {
+                ReactionHandlerStatus::Paused => {
                     anyhow::bail!("Can't Init Handler, Handler currently Paused");
                 }
-                UnifiedHandlerStatus::Stopped => {
+                ReactionHandlerStatus::Stopped => {
                     anyhow::bail!("Can't Init Handler, Handler currently Stopped");
                 }
-                UnifiedHandlerStatus::Error => {
+                ReactionHandlerStatus::Error => {
                     anyhow::bail!("Handler in Error state");
-                }
-                UnifiedHandlerStatus::BootstrapStarted
-                | UnifiedHandlerStatus::BootstrapComplete
-                | UnifiedHandlerStatus::Deleted => {
-                    anyhow::bail!("Handler in invalid state for init: {:?}", *status);
                 }
             }
         } else {
@@ -152,25 +145,20 @@ impl OutputHandler for HttpReactionHandler {
 
         if let Ok(mut status) = self.status.try_write() {
             match *status {
-                UnifiedHandlerStatus::Uninitialized => {
+                ReactionHandlerStatus::Uninitialized => {
                     anyhow::bail!("Can't Start Handler, Handler Uninitialized");
                 }
-                UnifiedHandlerStatus::Running => Ok(()),
-                UnifiedHandlerStatus::Paused => {
-                    *status = UnifiedHandlerStatus::Running;
+                ReactionHandlerStatus::Running => Ok(()),
+                ReactionHandlerStatus::Paused => {
+                    *status = ReactionHandlerStatus::Running;
                     self.notifier.notify_one();
                     Ok(())
                 }
-                UnifiedHandlerStatus::Stopped => {
+                ReactionHandlerStatus::Stopped => {
                     anyhow::bail!("Can't Start Handler, Handler already Stopped");
                 }
-                UnifiedHandlerStatus::Error => {
+                ReactionHandlerStatus::Error => {
                     anyhow::bail!("Handler in Error state");
-                }
-                UnifiedHandlerStatus::BootstrapStarted
-                | UnifiedHandlerStatus::BootstrapComplete
-                | UnifiedHandlerStatus::Deleted => {
-                    anyhow::bail!("Handler in invalid state for start: {:?}", *status);
                 }
             }
         } else {
@@ -183,24 +171,19 @@ impl OutputHandler for HttpReactionHandler {
 
         if let Ok(mut status) = self.status.try_write() {
             match *status {
-                UnifiedHandlerStatus::Uninitialized => {
+                ReactionHandlerStatus::Uninitialized => {
                     anyhow::bail!("Can't Pause Handler, Handler Uninitialized");
                 }
-                UnifiedHandlerStatus::Running => {
-                    *status = UnifiedHandlerStatus::Paused;
+                ReactionHandlerStatus::Running => {
+                    *status = ReactionHandlerStatus::Paused;
                     Ok(())
                 }
-                UnifiedHandlerStatus::Paused => Ok(()),
-                UnifiedHandlerStatus::Stopped => {
+                ReactionHandlerStatus::Paused => Ok(()),
+                ReactionHandlerStatus::Stopped => {
                     anyhow::bail!("Can't Pause Handler, Handler already Stopped");
                 }
-                UnifiedHandlerStatus::Error => {
+                ReactionHandlerStatus::Error => {
                     anyhow::bail!("Handler in Error state");
-                }
-                UnifiedHandlerStatus::BootstrapStarted
-                | UnifiedHandlerStatus::BootstrapComplete
-                | UnifiedHandlerStatus::Deleted => {
-                    anyhow::bail!("Handler in invalid state for pause: {:?}", *status);
                 }
             }
         } else {
@@ -213,22 +196,17 @@ impl OutputHandler for HttpReactionHandler {
 
         if let Ok(mut status) = self.status.try_write() {
             match *status {
-                UnifiedHandlerStatus::Uninitialized => {
+                ReactionHandlerStatus::Uninitialized => {
                     anyhow::bail!("Handler not initialized, current status: Uninitialized");
                 }
-                UnifiedHandlerStatus::Running | UnifiedHandlerStatus::Paused => {
-                    *status = UnifiedHandlerStatus::Stopped;
+                ReactionHandlerStatus::Running | ReactionHandlerStatus::Paused => {
+                    *status = ReactionHandlerStatus::Stopped;
                     self.shutdown_notify.notify_one();
                     Ok(())
                 }
-                UnifiedHandlerStatus::Stopped => Ok(()),
-                UnifiedHandlerStatus::Error => {
+                ReactionHandlerStatus::Stopped => Ok(()),
+                ReactionHandlerStatus::Error => {
                     anyhow::bail!("Handler in Error state");
-                }
-                UnifiedHandlerStatus::BootstrapStarted
-                | UnifiedHandlerStatus::BootstrapComplete
-                | UnifiedHandlerStatus::Deleted => {
-                    anyhow::bail!("Handler in invalid state for stop: {:?}", *status);
                 }
             }
         } else {
@@ -236,17 +214,21 @@ impl OutputHandler for HttpReactionHandler {
         }
     }
 
-    async fn status(&self) -> UnifiedHandlerStatus {
+    async fn status(&self) -> ReactionHandlerStatus {
         *self.status.read().await
+    }
+
+    async fn metrics(&self) -> Option<serde_json::Value> {
+        None
     }
 }
 
 async fn http_server_thread(
     settings: HttpReactionHandlerSettings,
-    status: Arc<RwLock<UnifiedHandlerStatus>>,
+    status: Arc<RwLock<ReactionHandlerStatus>>,
     notify: Arc<Notify>,
     shutdown_notify: Arc<Notify>,
-    result_handler_tx_channel: Sender<OutputHandlerMessage>,
+    result_handler_tx_channel: Sender<ReactionHandlerMessage>,
 ) {
     log::debug!("Starting HttpReactionHandler Server Thread");
 
@@ -262,12 +244,12 @@ async fn http_server_thread(
         };
 
         match current_status {
-            UnifiedHandlerStatus::Running => break,
-            UnifiedHandlerStatus::Paused => {
+            ReactionHandlerStatus::Running => break,
+            ReactionHandlerStatus::Paused => {
                 log::debug!("HTTP server waiting to be started");
                 notify.notified().await;
             }
-            UnifiedHandlerStatus::Stopped => {
+            ReactionHandlerStatus::Stopped => {
                 log::debug!("Handler stopped before server could start");
                 return;
             }
@@ -291,12 +273,12 @@ async fn http_server_thread(
         Ok(addr) => addr,
         Err(e) => {
             log::error!("Failed to parse server address: {}", e);
-            *status.write().await = UnifiedHandlerStatus::Error;
+            *status.write().await = ReactionHandlerStatus::Error;
             let _ = result_handler_tx_channel
-                .send(OutputHandlerMessage::Error {
-                    handler_type: HandlerType::Reaction,
-                    error: HandlerError::HttpServerError(format!("Invalid address: {}", e)),
-                })
+                .send(ReactionHandlerMessage::Error(ReactionHandlerError::new(
+                    format!("Invalid HTTP server address: {}", e),
+                    false,
+                )))
                 .await;
             return;
         }
@@ -313,20 +295,18 @@ async fn http_server_thread(
 
     if let Err(e) = server.await {
         log::error!("HTTP server error: {}", e);
-        *status.write().await = UnifiedHandlerStatus::Error;
+        *status.write().await = ReactionHandlerStatus::Error;
         let _ = result_handler_tx_channel
-            .send(OutputHandlerMessage::Error {
-                handler_type: HandlerType::Reaction,
-                error: HandlerError::HttpServerError(format!("Server error: {}", e)),
-            })
+            .send(ReactionHandlerMessage::Error(ReactionHandlerError::new(
+                format!("HTTP server error: {}", e),
+                false,
+            )))
             .await;
     }
 
     log::debug!("HTTP server thread shutting down, sending HandlerStopping message");
     let _ = result_handler_tx_channel
-        .send(OutputHandlerMessage::HandlerStopping {
-            handler_type: HandlerType::Reaction,
-        })
+        .send(ReactionHandlerMessage::Control(ReactionControlSignal::Stop))
         .await;
 }
 
@@ -389,20 +369,30 @@ async fn handle_reaction(
     };
 
     let query_id = state.settings.test_run_query_id.test_query_id.clone();
-    let record = HandlerRecord {
-        id: format!("{}-{}", query_id, sequence),
-        sequence,
-        created_time_ns: invocation_time_ns,
-        processed_time_ns: invocation_time_ns,
-        traceparent,
-        tracestate,
-        payload: HandlerPayload::ReactionInvocation {
-            reaction_type,
-            query_id,
-            request_method: method.to_string(),
-            request_path: uri.path().to_string(),
-            request_body,
-            headers: header_map,
+
+    // Create reaction data as JSON
+    let reaction_data = serde_json::json!({
+        "query_id": query_id,
+        "reaction_type": reaction_type,
+        "request_body": request_body,
+    });
+
+    // Create metadata with HTTP-specific information
+    let metadata = serde_json::json!({
+        "request_method": method.to_string(),
+        "request_path": uri.path().to_string(),
+        "headers": header_map,
+        "traceparent": traceparent,
+        "tracestate": tracestate,
+    });
+
+    let invocation = ReactionInvocation {
+        handler_type: ReactionHandlerType::Http,
+        payload: ReactionHandlerPayload {
+            value: reaction_data,
+            timestamp: chrono::DateTime::from_timestamp_nanos(invocation_time_ns as i64),
+            invocation_id: Some(format!("{}-{}", query_id, sequence)),
+            metadata: Some(metadata),
         },
     };
 
@@ -413,7 +403,11 @@ async fn handle_reaction(
         sequence
     );
 
-    match state.tx.send(OutputHandlerMessage::Record(record)).await {
+    match state
+        .tx
+        .send(ReactionHandlerMessage::Invocation(invocation))
+        .await
+    {
         Ok(_) => (StatusCode::OK, "OK"),
         Err(e) => {
             log::error!("Failed to send reaction message: {}", e);

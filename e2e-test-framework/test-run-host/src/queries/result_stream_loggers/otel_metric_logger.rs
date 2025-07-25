@@ -25,9 +25,9 @@ use serde::{Deserialize, Serialize};
 
 use test_data_store::test_run_storage::TestRunQueryId;
 
-use crate::queries::{
-    output_handler_message::{HandlerPayload, HandlerRecord},
-    result_stream_record::{ChangeEvent, QueryResultRecord},
+use crate::{
+    common::{HandlerPayload, HandlerRecord},
+    queries::result_stream_record::{ChangeEvent, QueryResultRecord},
 };
 
 use super::{ResultStreamLogger, ResultStreamLoggerResult};

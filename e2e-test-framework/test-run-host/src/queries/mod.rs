@@ -29,14 +29,19 @@ use test_data_store::{
     },
 };
 
-pub mod output_handler_message;
+pub mod query_output_handler;
 pub mod query_result_observer;
-pub mod reaction_handlers;
-mod result_stream_handlers;
+pub mod result_stream_handlers;
 pub mod result_stream_loggers;
-mod result_stream_record;
-mod stop_triggers;
-pub mod unified_handler;
+pub mod result_stream_record;
+pub mod stop_triggers;
+
+// Re-export commonly used types from query_output_handler
+pub use query_output_handler::{
+    create_query_handler, QueryControlSignal, QueryHandlerError, QueryHandlerMessage,
+    QueryHandlerPayload, QueryHandlerRecord, QueryHandlerStatus, QueryHandlerType,
+    QueryOutputHandler,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TestRunQueryOverrides {

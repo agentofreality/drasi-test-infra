@@ -18,7 +18,7 @@ use serde_json::json;
 use utoipa::{OpenApi, ToSchema};
 
 use crate::web_api::{
-    queries, repo, sources, DataCollectorStateResponse, TestDataStoreStateResponse,
+    queries, reactions, repo, sources, DataCollectorStateResponse, TestDataStoreStateResponse,
     TestRunHostStateResponse, TestServiceStateResponse,
 };
 
@@ -104,6 +104,45 @@ pub struct QueryObserverState {
     pub settings: serde_json::Value,
 }
 
+/// Reaction state response
+#[derive(Debug, Serialize, ToSchema)]
+#[schema(example = json!({
+    "id": {"test_id": "test-123", "run_id": "run-456", "query_id": "reaction-789"},
+    "reaction_observer": {
+        "status": "Running",
+        "stream_status": "Active",
+        "error_message": null,
+        "result_summary": {
+            "invocation_count": 25,
+            "elapsed_time": "00:02:15"
+        }
+    },
+    "start_immediately": true
+}))]
+pub struct ReactionStateResponse {
+    /// Reaction identifier
+    pub id: serde_json::Value,
+    /// Reaction observer state
+    pub reaction_observer: ReactionObserverState,
+    /// Whether to start immediately
+    pub start_immediately: bool,
+}
+
+/// Reaction observer state
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ReactionObserverState {
+    /// Observer status
+    pub status: String,
+    /// Stream status
+    pub stream_status: String,
+    /// Error message if any
+    pub error_message: Option<String>,
+    /// Result summary
+    pub result_summary: serde_json::Value,
+    /// Observer settings
+    pub settings: serde_json::Value,
+}
+
 /// Source bootstrap response
 #[derive(Debug, Serialize, ToSchema)]
 #[schema(example = json!({
@@ -144,6 +183,14 @@ pub struct SourceBootstrapResponseBody {
         queries::query_observer_reset_handler,
         queries::query_observer_start_handler,
         queries::query_observer_stop_handler,
+        // Reaction endpoints
+        reactions::get_reaction_list_handler,
+        reactions::get_reaction_handler,
+        reactions::post_reaction_handler,
+        reactions::reaction_observer_pause_handler,
+        reactions::reaction_observer_reset_handler,
+        reactions::reaction_observer_start_handler,
+        reactions::reaction_observer_stop_handler,
         // Repository endpoints
         repo::get_test_repo_list_handler,
         repo::get_test_repo_handler,
@@ -176,6 +223,9 @@ pub struct SourceBootstrapResponseBody {
             // Query schemas
             QueryStateResponse,
             QueryObserverState,
+            // Reaction schemas
+            ReactionStateResponse,
+            ReactionObserverState,
             // Repository schemas
             repo::TestRepoResponse,
             repo::TestPostBody,
@@ -188,6 +238,7 @@ pub struct SourceBootstrapResponseBody {
         (name = "service", description = "Test Service general information"),
         (name = "sources", description = "Test source management API"),
         (name = "queries", description = "Test query management API"),
+        (name = "reactions", description = "Test reaction management API"),
         (name = "repos", description = "Test repository management API")
     ),
     info(

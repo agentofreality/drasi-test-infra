@@ -20,13 +20,16 @@ use tokio::sync::Mutex;
 
 use data_collection_storage::{DataCollectionStorage, DataCollectionStore};
 use test_repo_storage::{
-    models::{LocalTestDefinition, TestDefinition, TestQueryDefinition, TestSourceDefinition},
+    models::{
+        LocalTestDefinition, TestDefinition, TestQueryDefinition, TestReactionDefinition,
+        TestSourceDefinition,
+    },
     repo_clients::TestRepoConfig,
     TestRepoStorage, TestRepoStore, TestSourceScriptSet, TestSourceStorage, TestStorage,
 };
 use test_run_storage::{
-    TestRunId, TestRunQueryId, TestRunQueryStorage, TestRunSourceId, TestRunSourceStorage,
-    TestRunStorage, TestRunStore,
+    TestRunId, TestRunQueryId, TestRunQueryStorage, TestRunReactionId, TestRunReactionStorage,
+    TestRunSourceId, TestRunSourceStorage, TestRunStorage, TestRunStore,
 };
 
 pub mod data_collection_storage;
@@ -399,6 +402,31 @@ impl TestDataStore {
             .await
     }
 
+    pub async fn get_test_run_reaction_storage(
+        &self,
+        test_run_reaction_id: &TestRunReactionId,
+    ) -> anyhow::Result<TestRunReactionStorage> {
+        self.test_run_store
+            .lock()
+            .await
+            .get_test_run_storage(&test_run_reaction_id.test_run_id, false)
+            .await?
+            .get_reaction_storage(test_run_reaction_id, false)
+            .await
+    }
+
+    pub async fn get_test_reaction_definition_for_test_run_reaction(
+        &self,
+        test_run_reaction_id: &TestRunReactionId,
+    ) -> anyhow::Result<TestReactionDefinition> {
+        self.get_test_definition(
+            &test_run_reaction_id.test_run_id.test_repo_id,
+            &test_run_reaction_id.test_run_id.test_id,
+        )
+        .await?
+        .get_test_reaction(&test_run_reaction_id.test_reaction_id)
+    }
+
     // Data Collection functions
     pub async fn contains_data_collection(&self, id: &str) -> anyhow::Result<bool> {
         self.data_collection_store
@@ -460,15 +488,15 @@ mod tests {
         let data_store = TestDataStore::new_temp(None).await?;
 
         let temp_dir_path = data_store.root_path.clone();
-        assert_eq!(temp_dir_path.exists(), true);
+        assert!(temp_dir_path.exists());
 
-        assert_eq!(data_store.get_data_collection_ids().await?.is_empty(), true);
-        assert_eq!(data_store.get_test_repo_ids().await?.is_empty(), true);
-        assert_eq!(data_store.get_test_run_ids().await?.is_empty(), true);
+        assert!(data_store.get_data_collection_ids().await?.is_empty());
+        assert!(data_store.get_test_repo_ids().await?.is_empty());
+        assert!(data_store.get_test_run_ids().await?.is_empty());
 
         drop(data_store);
 
-        assert_eq!(temp_dir_path.exists(), false);
+        assert!(!temp_dir_path.exists());
 
         Ok(())
     }
@@ -511,14 +539,14 @@ mod tests {
 
         let data_store = TestDataStore::new_temp(Some(test_repos)).await?;
 
-        assert_eq!(data_store.get_data_collection_ids().await?.is_empty(), true);
-        assert_eq!(data_store.get_test_run_ids().await?.is_empty(), true);
+        assert!(data_store.get_data_collection_ids().await?.is_empty());
+        assert!(data_store.get_test_run_ids().await?.is_empty());
 
         let test_repo_ids = data_store.get_test_repo_ids().await?;
         assert_eq!(test_repo_ids.len(), 3);
-        assert_eq!(test_repo_ids.contains(&"test_repo_1".to_string()), true);
-        assert_eq!(test_repo_ids.contains(&"test_repo_2".to_string()), true);
-        assert_eq!(test_repo_ids.contains(&"test_repo_3".to_string()), true);
+        assert!(test_repo_ids.contains(&"test_repo_1".to_string()));
+        assert!(test_repo_ids.contains(&"test_repo_2".to_string()));
+        assert!(test_repo_ids.contains(&"test_repo_3".to_string()));
 
         Ok(())
     }
@@ -535,16 +563,16 @@ mod tests {
         };
 
         let data_store = TestDataStore::new(data_store_config).await?;
-        assert_eq!(temp_dir_path.exists(), true);
+        assert!(temp_dir_path.exists());
 
-        assert_eq!(data_store.get_data_collection_ids().await?.is_empty(), true);
-        assert_eq!(data_store.get_test_repo_ids().await?.is_empty(), true);
-        assert_eq!(data_store.get_test_run_ids().await?.is_empty(), true);
+        assert!(data_store.get_data_collection_ids().await?.is_empty());
+        assert!(data_store.get_test_repo_ids().await?.is_empty());
+        assert!(data_store.get_test_run_ids().await?.is_empty());
 
         drop(data_store);
 
         // The TempDir should still exist because the TestDataStoreConfig.delete_on_stop flag is false.
-        assert_eq!(temp_dir_path.exists(), true);
+        assert!(temp_dir_path.exists());
 
         Ok(())
     }
@@ -561,16 +589,16 @@ mod tests {
         };
 
         let data_store = TestDataStore::new(data_store_config).await?;
-        assert_eq!(temp_dir_path.exists(), true);
+        assert!(temp_dir_path.exists());
 
-        assert_eq!(data_store.get_data_collection_ids().await?.is_empty(), true);
-        assert_eq!(data_store.get_test_repo_ids().await?.is_empty(), true);
-        assert_eq!(data_store.get_test_run_ids().await?.is_empty(), true);
+        assert!(data_store.get_data_collection_ids().await?.is_empty());
+        assert!(data_store.get_test_repo_ids().await?.is_empty());
+        assert!(data_store.get_test_run_ids().await?.is_empty());
 
         drop(data_store);
 
         // The TempDir should not exist because the TestDataStoreConfig.delete_on_stop flag is true.
-        assert_eq!(temp_dir_path.exists(), false);
+        assert!(!temp_dir_path.exists());
 
         Ok(())
     }
@@ -623,19 +651,19 @@ mod tests {
 
         let data_store = TestDataStore::new(data_store_config).await?;
 
-        assert_eq!(data_store.get_data_collection_ids().await?.is_empty(), true);
-        assert_eq!(data_store.get_test_run_ids().await?.is_empty(), true);
+        assert!(data_store.get_data_collection_ids().await?.is_empty());
+        assert!(data_store.get_test_run_ids().await?.is_empty());
 
         let test_repo_ids = data_store.get_test_repo_ids().await?;
         assert_eq!(test_repo_ids.len(), 3);
-        assert_eq!(test_repo_ids.contains(&"test_repo_1".to_string()), true);
-        assert_eq!(test_repo_ids.contains(&"test_repo_2".to_string()), true);
-        assert_eq!(test_repo_ids.contains(&"test_repo_3".to_string()), true);
+        assert!(test_repo_ids.contains(&"test_repo_1".to_string()));
+        assert!(test_repo_ids.contains(&"test_repo_2".to_string()));
+        assert!(test_repo_ids.contains(&"test_repo_3".to_string()));
 
         drop(data_store);
 
         // The TempDir should not exist because the TestDataStoreConfig.delete_on_stop flag is true.
-        assert_eq!(temp_dir_path.exists(), false);
+        assert!(!temp_dir_path.exists());
 
         Ok(())
     }

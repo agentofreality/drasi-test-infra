@@ -24,7 +24,7 @@ use console_logger::{ConsoleResultStreamLogger, ConsoleResultStreamLoggerConfig}
 use jsonl_file_logger::{JsonlFileResultStreamLogger, JsonlFileResultStreamLoggerConfig};
 use test_data_store::test_run_storage::{TestRunQueryId, TestRunQueryStorage};
 
-use super::output_handler_message::HandlerRecord;
+use crate::common::HandlerRecord;
 
 pub mod console_logger;
 pub mod jsonl_file_logger;

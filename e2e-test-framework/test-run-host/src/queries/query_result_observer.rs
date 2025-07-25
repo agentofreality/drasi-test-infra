@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! QueryResultObserver implementation using unified output handlers
+//! QueryResultObserver implementation using query-specific output handlers
 //!
-//! This module provides a simplified QueryResultObserver that uses the unified
-//! OutputHandler trait, eliminating the need for separate handler types.
+//! This module provides a QueryResultObserver that uses query-specific
+//! handler types for processing query result streams.
 
 use std::{
     cmp::max,
@@ -28,12 +28,12 @@ use time::{format_description, OffsetDateTime};
 use tokio::sync::mpsc::Receiver;
 
 use crate::queries::{
-    output_handler_message::{HandlerPayload, HandlerRecord, OutputHandlerMessage},
-    result_stream_record::{ControlSignal, QueryResultRecord},
-    stop_triggers::{create_stop_trigger, StopTrigger},
-    unified_handler::{
-        create_output_handler, OutputHandler, UnifiedHandlerDefinition, UnifiedHandlerStatus,
+    query_output_handler::{
+        QueryControlSignal, QueryHandlerMessage, QueryHandlerRecord,
+        QueryHandlerStatus, QueryOutputHandler,
     },
+    result_stream_record::{ControlEvent, ControlSignal, QueryResultRecord},
+    stop_triggers::{create_stop_trigger, StopTrigger},
 };
 
 use super::result_stream_loggers::{
@@ -99,7 +99,7 @@ pub struct QueryResultObserverSettings {
     pub id: TestRunQueryId,
     pub loggers: Vec<ResultStreamLoggerConfig>,
     pub output_storage: TestRunQueryStorage,
-    pub stop_trigger: StopTriggerDefinition,
+    pub stop_trigger: Option<StopTriggerDefinition>,
 }
 
 impl QueryResultObserverSettings {
@@ -110,19 +110,23 @@ impl QueryResultObserverSettings {
         loggers: Vec<ResultStreamLoggerConfig>,
         test_run_overrides: Option<TestRunQueryOverrides>,
     ) -> anyhow::Result<Self> {
-        let mut settings = Self {
-            stop_trigger: definition.stop_trigger.clone(),
+        // Start with stop trigger from test definition
+        let mut stop_trigger = definition.stop_trigger.clone();
+        
+        // Allow overrides to replace it
+        if let Some(overrides) = test_run_overrides {
+            if let Some(override_stop_trigger) = &overrides.stop_trigger {
+                stop_trigger = Some(override_stop_trigger.clone());
+            }
+        }
+        
+        let settings = Self {
+            stop_trigger,
             definition,
             id: test_run_query_id,
             loggers,
             output_storage,
         };
-
-        if let Some(overrides) = test_run_overrides {
-            if let Some(stop_trigger) = &overrides.stop_trigger {
-                settings.stop_trigger = stop_trigger.clone();
-            }
-        }
 
         Ok(settings)
     }
@@ -155,7 +159,7 @@ pub struct QueryResultObserverMessageResponse {
 #[derive(Debug, Serialize)]
 pub struct QueryResultObserverExternalState {
     pub status: QueryResultObserverStatus,
-    pub stream_status: UnifiedHandlerStatus,
+    pub stream_status: QueryHandlerStatus,
     pub error_message: Option<String>,
     pub result_summary: QueryResultObserverSummary,
     pub settings: QueryResultObserverSettings,
@@ -483,9 +487,9 @@ impl QueryResultObserver {
 
 /// Internal state for QueryResultObserver
 struct QueryResultObserverInternalState {
-    output_handler: Option<Box<dyn OutputHandler + Send + Sync>>,
-    output_handler_rx_channel: Option<Receiver<OutputHandlerMessage>>,
-    handler_status: UnifiedHandlerStatus,
+    output_handler: Option<Box<dyn QueryOutputHandler + Send + Sync>>,
+    output_handler_rx_channel: Option<Receiver<QueryHandlerMessage>>,
+    handler_status: QueryHandlerStatus,
     loggers: Vec<Box<dyn ResultStreamLogger + Send + Sync>>,
     logger_results: Vec<ResultStreamLoggerResult>,
     error_message: Option<String>,
@@ -507,27 +511,9 @@ impl QueryResultObserverInternalState {
             ..Default::default()
         };
 
-        // Create unified handler from either result stream or reaction handler definition
-        let (output_handler, output_handler_rx_channel) =
-            if let Some(result_stream_def) = &settings.definition.result_stream_handler {
-                let handler = create_output_handler(
-                    settings.id.clone(),
-                    UnifiedHandlerDefinition::ResultStream(result_stream_def.clone()),
-                )
-                .await?;
-                let rx_channel = handler.init().await?;
-                (Some(handler), Some(rx_channel))
-            } else if let Some(reaction_def) = &settings.definition.reaction_handler {
-                let handler = create_output_handler(
-                    settings.id.clone(),
-                    UnifiedHandlerDefinition::Reaction(reaction_def.clone()),
-                )
-                .await?;
-                let rx_channel = handler.init().await?;
-                (Some(handler), Some(rx_channel))
-            } else {
-                (None, None)
-            };
+        // Create result stream handler
+        // Note: output_handler is now a runtime configuration, not part of test definition
+        let (output_handler, output_handler_rx_channel) = (None, None);
 
         // Create result stream loggers
         let loggers = create_result_stream_loggers(
@@ -537,12 +523,24 @@ impl QueryResultObserverInternalState {
         )
         .await?;
 
-        let stop_trigger = create_stop_trigger(&settings.stop_trigger).await?;
+        let stop_trigger = match &settings.stop_trigger {
+            Some(trigger_def) => create_stop_trigger(trigger_def).await?,
+            None => {
+                // Create a default stop trigger that never triggers
+                use test_data_store::test_repo_storage::models::RecordCountStopTriggerDefinition;
+                create_stop_trigger(&StopTriggerDefinition::RecordCount(
+                    RecordCountStopTriggerDefinition {
+                        record_count: u64::MAX,
+                    },
+                ))
+                .await?
+            }
+        };
 
         Ok(Self {
             output_handler,
             output_handler_rx_channel,
-            handler_status: UnifiedHandlerStatus::Uninitialized,
+            handler_status: QueryHandlerStatus::Uninitialized,
             loggers,
             logger_results: vec![],
             error_message: None,
@@ -569,13 +567,57 @@ impl QueryResultObserverInternalState {
         res
     }
 
-    async fn log_handler_record(&mut self, record: &HandlerRecord) {
+    async fn log_handler_record(&mut self, record: &QueryHandlerRecord) {
+        // Convert QueryHandlerRecord to common HandlerRecord for loggers
+        // This is temporary until loggers are migrated to use query-specific types
+        let common_record = crate::common::HandlerRecord {
+            id: format!("query-{}", record.payload.sequence.unwrap_or(0)),
+            sequence: record.payload.sequence.unwrap_or(0),
+            created_time_ns: record
+                .payload
+                .timestamp
+                .and_then(|ts| ts.timestamp_nanos_opt())
+                .map(|ns| ns as u64)
+                .unwrap_or_else(|| {
+                    SystemTime::now()
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64
+                }),
+            processed_time_ns: record
+                .payload
+                .timestamp
+                .and_then(|ts| ts.timestamp_nanos_opt())
+                .map(|ns| ns as u64)
+                .unwrap_or(0),
+            traceparent: None,
+            tracestate: None,
+            payload: crate::common::HandlerPayload::ResultStream {
+                query_result: serde_json::from_value(record.payload.value.clone()).unwrap_or(
+                    QueryResultRecord::Control(ControlEvent {
+                        base: crate::queries::result_stream_record::BaseResultEvent {
+                            query_id: "unknown".to_string(),
+                            sequence: 0,
+                            source_time_ms: 0,
+                            metadata: None,
+                        },
+                        control_signal: ControlSignal::Stopped(
+                            crate::queries::result_stream_record::StoppedSignal {},
+                        ),
+                    }),
+                ),
+            },
+        };
+
         let loggers = &mut self.loggers;
 
         let futures: Vec<_> = loggers
             .iter_mut()
-            .map(|logger| async move {
-                let _ = logger.log_handler_record(record).await;
+            .map(|logger| {
+                let record_clone = common_record.clone();
+                async move {
+                    let _ = logger.log_handler_record(&record_clone).await;
+                }
             })
             .collect();
 
@@ -583,85 +625,87 @@ impl QueryResultObserverInternalState {
         let _ = join_all(futures).await;
     }
 
-    async fn process_handler_record(&mut self, record: HandlerRecord) -> anyhow::Result<()> {
+    async fn process_handler_record(&mut self, record: QueryHandlerRecord) -> anyhow::Result<()> {
         self.log_handler_record(&record).await;
 
-        match record.payload {
-            HandlerPayload::ResultStream { query_result } => {
-                let record_time_ns = record.processed_time_ns;
-                self.metrics.result_stream_record_seq = query_result.get_source_seq();
+        // Extract query result from payload
+        let query_result =
+            match serde_json::from_value::<QueryResultRecord>(record.payload.value.clone()) {
+                Ok(result) => result,
+                Err(e) => {
+                    log::error!("Failed to parse query result: {}", e);
+                    return Ok(());
+                }
+            };
+        let record_time_ns = record
+            .payload
+            .timestamp
+            .and_then(|ts| ts.timestamp_nanos_opt())
+            .map(|ns| ns as u64)
+            .unwrap_or_else(|| {
+                SystemTime::now()
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos() as u64
+            });
+        self.metrics.result_stream_record_seq = query_result.get_source_seq();
 
-                match query_result {
-                    QueryResultRecord::Change(change) => {
-                        if change.base.metadata.is_some() {
-                            self.metrics.update_change_record_time(record_time_ns);
-                            self.metrics.result_stream_change_record_count += 1;
-                        } else {
-                            self.metrics.update_bootstrap_record_time(record_time_ns);
-                            self.metrics.result_stream_bootstrap_record_count += 1;
-                        }
+        match query_result {
+            QueryResultRecord::Change(change) => {
+                if change.base.metadata.is_some() {
+                    self.metrics.update_change_record_time(record_time_ns);
+                    self.metrics.result_stream_change_record_count += 1;
+                } else {
+                    self.metrics.update_bootstrap_record_time(record_time_ns);
+                    self.metrics.result_stream_bootstrap_record_count += 1;
+                }
+            }
+            QueryResultRecord::Control(control) => {
+                self.metrics.control_stream_record_count += 1;
+                match control.control_signal {
+                    ControlSignal::BootstrapStarted(_) => {
+                        self.handler_status = QueryHandlerStatus::BootstrapStarted;
+                        self.metrics
+                            .try_set_control_stream_bootstrap_start_time(record_time_ns);
                     }
-                    QueryResultRecord::Control(control) => {
-                        self.metrics.control_stream_record_count += 1;
-                        match control.control_signal {
-                            ControlSignal::BootstrapStarted(_) => {
-                                self.handler_status = UnifiedHandlerStatus::BootstrapStarted;
-                                self.metrics
-                                    .try_set_control_stream_bootstrap_start_time(record_time_ns);
-                            }
-                            ControlSignal::BootstrapCompleted(_) => {
-                                self.handler_status = UnifiedHandlerStatus::BootstrapComplete;
-                                self.metrics
-                                    .try_set_control_stream_bootstrap_complete_time(record_time_ns);
-                            }
-                            ControlSignal::Running(_) => {
-                                self.handler_status = UnifiedHandlerStatus::Running;
-                                self.metrics
-                                    .try_set_control_stream_running_time(record_time_ns);
-                            }
-                            ControlSignal::Stopped(_) => {
-                                self.handler_status = UnifiedHandlerStatus::Stopped;
-                                self.metrics
-                                    .try_set_control_stream_stop_time(record_time_ns);
-                            }
-                            ControlSignal::Deleted(_) => {
-                                self.handler_status = UnifiedHandlerStatus::Deleted;
-                                self.metrics
-                                    .try_set_control_stream_delete_time(record_time_ns);
-                            }
-                        }
+                    ControlSignal::BootstrapCompleted(_) => {
+                        self.handler_status = QueryHandlerStatus::BootstrapComplete;
+                        self.metrics
+                            .try_set_control_stream_bootstrap_complete_time(record_time_ns);
+                    }
+                    ControlSignal::Running(_) => {
+                        self.handler_status = QueryHandlerStatus::Running;
+                        self.metrics
+                            .try_set_control_stream_running_time(record_time_ns);
+                    }
+                    ControlSignal::Stopped(_) => {
+                        self.handler_status = QueryHandlerStatus::Stopped;
+                        self.metrics
+                            .try_set_control_stream_stop_time(record_time_ns);
+                    }
+                    ControlSignal::Deleted(_) => {
+                        self.handler_status = QueryHandlerStatus::Deleted;
+                        self.metrics
+                            .try_set_control_stream_delete_time(record_time_ns);
                     }
                 }
-
-                log::info!(
-                    "Processed HandlerRecord: {:?}, sequence: {}, time_ns: {}, handler_status: {:?}",
-                    record.id,
-                    record.sequence,
-                    record_time_ns,
-                    self.handler_status
-                );
-            }
-            HandlerPayload::ReactionInvocation {
-                reaction_type,
-                query_id,
-                request_body,
-                ..
-            } => {
-                log::debug!(
-                    "Reaction invoked: type={}, query={}, sequence={}, invocation_time={}, body={}",
-                    reaction_type,
-                    query_id,
-                    record.sequence,
-                    record.processed_time_ns,
-                    request_body
-                );
-
-                self.metrics.result_stream_change_record_count += 1;
-
-                // For reaction handlers, we don't have control signals, so status remains as is
             }
         }
 
+        log::info!(
+            "Processed HandlerRecord: sequence: {}, time_ns: {}, handler_status: {:?}",
+            record.payload.sequence.unwrap_or(0),
+            record_time_ns,
+            self.handler_status
+        );
+
+        // Check if we should stop
+        self.check_stop_trigger().await?;
+
+        Ok(())
+    }
+
+    async fn check_stop_trigger(&mut self) -> anyhow::Result<()> {
         // Check if we should stop
         if self
             .stop_trigger
@@ -680,13 +724,13 @@ impl QueryResultObserverInternalState {
 
     async fn process_output_handler_message(
         &mut self,
-        message: OutputHandlerMessage,
+        message: QueryHandlerMessage,
     ) -> anyhow::Result<()> {
         log::trace!("Received output handler message: {:?}", message);
 
         match message {
-            OutputHandlerMessage::HandlerStopping { .. } => {
-                self.handler_status = UnifiedHandlerStatus::Stopped;
+            QueryHandlerMessage::Control(QueryControlSignal::Stop) => {
+                self.handler_status = QueryHandlerStatus::Stopped;
                 self.metrics.try_set_control_stream_stop_time(
                     SystemTime::now()
                         .duration_since(SystemTime::UNIX_EPOCH)
@@ -694,10 +738,49 @@ impl QueryResultObserverInternalState {
                         .as_nanos() as u64,
                 );
             }
-            OutputHandlerMessage::Record(record) => {
+            QueryHandlerMessage::Control(QueryControlSignal::BootstrapStarted) => {
+                self.handler_status = QueryHandlerStatus::BootstrapStarted;
+                self.metrics.try_set_control_stream_bootstrap_start_time(
+                    SystemTime::now()
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64,
+                );
+            }
+            QueryHandlerMessage::Control(QueryControlSignal::BootstrapComplete) => {
+                self.handler_status = QueryHandlerStatus::BootstrapComplete;
+                self.metrics.try_set_control_stream_bootstrap_complete_time(
+                    SystemTime::now()
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64,
+                );
+            }
+            QueryHandlerMessage::Control(QueryControlSignal::Start) => {
+                self.handler_status = QueryHandlerStatus::Running;
+                self.metrics.try_set_control_stream_running_time(
+                    SystemTime::now()
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64,
+                );
+            }
+            QueryHandlerMessage::Control(QueryControlSignal::Pause) => {
+                self.handler_status = QueryHandlerStatus::Paused;
+            }
+            QueryHandlerMessage::Control(QueryControlSignal::EndOfStream) => {
+                self.handler_status = QueryHandlerStatus::Stopped;
+                self.metrics.try_set_control_stream_stop_time(
+                    SystemTime::now()
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .unwrap()
+                        .as_nanos() as u64,
+                );
+            }
+            QueryHandlerMessage::Record(record) => {
                 self.process_handler_record(record).await?;
             }
-            OutputHandlerMessage::Error { error, .. } => {
+            QueryHandlerMessage::Error(error) => {
                 self.transition_to_error_state(
                     &format!("Error in output handler: {:?}", error),
                     None,
@@ -771,7 +854,7 @@ impl QueryResultObserverInternalState {
         self.logger_results = vec![];
         self.error_message = None;
         self.status = QueryResultObserverStatus::Paused;
-        self.handler_status = UnifiedHandlerStatus::Uninitialized;
+        self.handler_status = QueryHandlerStatus::Uninitialized;
         self.metrics = QueryResultObserverMetrics {
             observer_create_time_ns: SystemTime::now()
                 .duration_since(SystemTime::UNIX_EPOCH)
@@ -913,7 +996,7 @@ impl QueryResultObserverInternalState {
         if let Some(handler) = &self.output_handler {
             match handler.stop().await {
                 Ok(_) => {
-                    self.handler_status = UnifiedHandlerStatus::Stopped;
+                    self.handler_status = QueryHandlerStatus::Stopped;
                 }
                 Err(e) => {
                     self.transition_to_error_state("Error stopping output handler", Some(&e));

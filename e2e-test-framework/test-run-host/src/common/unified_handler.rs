@@ -179,33 +179,37 @@ pub enum OutputHandlerConfig {
 }
 
 /// Conversion utilities for migrating from legacy status types
-impl From<super::result_stream_handlers::ResultStreamHandlerStatus> for UnifiedHandlerStatus {
-    fn from(status: super::result_stream_handlers::ResultStreamHandlerStatus) -> Self {
+impl From<crate::queries::result_stream_handlers::ResultStreamHandlerStatus>
+    for UnifiedHandlerStatus
+{
+    fn from(status: crate::queries::result_stream_handlers::ResultStreamHandlerStatus) -> Self {
         match status {
-            super::result_stream_handlers::ResultStreamHandlerStatus::Unknown => {
+            crate::queries::result_stream_handlers::ResultStreamHandlerStatus::Unknown => {
                 Self::Uninitialized
             }
-            super::result_stream_handlers::ResultStreamHandlerStatus::BootstrapStarted => {
+            crate::queries::result_stream_handlers::ResultStreamHandlerStatus::BootstrapStarted => {
                 Self::BootstrapStarted
             }
-            super::result_stream_handlers::ResultStreamHandlerStatus::BootstrapComplete => {
+            crate::queries::result_stream_handlers::ResultStreamHandlerStatus::BootstrapComplete => {
                 Self::BootstrapComplete
             }
-            super::result_stream_handlers::ResultStreamHandlerStatus::Running => Self::Running,
-            super::result_stream_handlers::ResultStreamHandlerStatus::Stopped => Self::Stopped,
-            super::result_stream_handlers::ResultStreamHandlerStatus::Deleted => Self::Deleted,
+            crate::queries::result_stream_handlers::ResultStreamHandlerStatus::Running => Self::Running,
+            crate::queries::result_stream_handlers::ResultStreamHandlerStatus::Stopped => Self::Stopped,
+            crate::queries::result_stream_handlers::ResultStreamHandlerStatus::Deleted => Self::Deleted,
         }
     }
 }
 
-impl From<super::reaction_handlers::ReactionHandlerStatus> for UnifiedHandlerStatus {
-    fn from(status: super::reaction_handlers::ReactionHandlerStatus) -> Self {
+impl From<crate::reactions::reaction_handlers::ReactionHandlerStatus> for UnifiedHandlerStatus {
+    fn from(status: crate::reactions::reaction_handlers::ReactionHandlerStatus) -> Self {
         match status {
-            super::reaction_handlers::ReactionHandlerStatus::Uninitialized => Self::Uninitialized,
-            super::reaction_handlers::ReactionHandlerStatus::Running => Self::Running,
-            super::reaction_handlers::ReactionHandlerStatus::Paused => Self::Paused,
-            super::reaction_handlers::ReactionHandlerStatus::Stopped => Self::Stopped,
-            super::reaction_handlers::ReactionHandlerStatus::Error => Self::Error,
+            crate::reactions::reaction_handlers::ReactionHandlerStatus::Uninitialized => {
+                Self::Uninitialized
+            }
+            crate::reactions::reaction_handlers::ReactionHandlerStatus::Running => Self::Running,
+            crate::reactions::reaction_handlers::ReactionHandlerStatus::Paused => Self::Paused,
+            crate::reactions::reaction_handlers::ReactionHandlerStatus::Stopped => Self::Stopped,
+            crate::reactions::reaction_handlers::ReactionHandlerStatus::Error => Self::Error,
         }
     }
 }
@@ -213,11 +217,6 @@ impl From<super::reaction_handlers::ReactionHandlerStatus> for UnifiedHandlerSta
 use test_data_store::{
     test_repo_storage::models::{ReactionHandlerDefinition, ResultStreamHandlerDefinition},
     test_run_storage::TestRunQueryId,
-};
-
-use super::{
-    reaction_handlers::create_reaction_handler,
-    result_stream_handlers::create_result_stream_handler,
 };
 
 /// Unified handler definition that encompasses all handler types
@@ -228,13 +227,12 @@ pub enum UnifiedHandlerDefinition {
 }
 
 /// Create an output handler from a unified definition
+///
+/// NOTE: This function is deprecated and will be removed.
+/// Use create_query_handler or create_reaction_handler directly instead.
 pub async fn create_output_handler(
-    id: TestRunQueryId,
-    definition: UnifiedHandlerDefinition,
+    _id: TestRunQueryId,
+    _definition: UnifiedHandlerDefinition,
 ) -> anyhow::Result<Box<dyn OutputHandler + Send + Sync>> {
-    match definition {
-        UnifiedHandlerDefinition::ResultStream(def) => create_result_stream_handler(id, def).await,
-        UnifiedHandlerDefinition::Reaction(def) => create_reaction_handler(id, def).await,
-    }
+    anyhow::bail!("create_output_handler is deprecated. Use create_query_handler or create_reaction_handler directly instead.")
 }
-

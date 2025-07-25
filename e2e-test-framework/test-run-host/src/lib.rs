@@ -27,6 +27,10 @@ use queries::{
     result_stream_loggers::ResultStreamLoggerResult, TestRunQuery, TestRunQueryConfig,
     TestRunQueryDefinition, TestRunQueryState,
 };
+use reactions::{
+    reaction_observer::ReactionObserverCommandResponse, TestRunReaction, TestRunReactionConfig,
+    TestRunReactionDefinition, TestRunReactionState,
+};
 use sources::{
     bootstrap_data_generators::BootstrapData, create_test_run_source,
     source_change_generators::SourceChangeGeneratorCommandResponse, TestRunSource,
@@ -34,17 +38,21 @@ use sources::{
 };
 use test_data_store::{
     test_repo_storage::models::SpacingMode,
-    test_run_storage::{TestRunQueryId, TestRunSourceId},
+    test_run_storage::{TestRunId, TestRunQueryId, TestRunReactionId, TestRunSourceId},
     TestDataStore,
 };
 
+pub mod common;
 pub mod queries;
+pub mod reactions;
 pub mod sources;
 
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct TestRunHostConfig {
     #[serde(default)]
     pub queries: Vec<TestRunQueryConfig>,
+    #[serde(default)]
+    pub reactions: Vec<TestRunReactionConfig>,
     #[serde(default)]
     pub sources: Vec<TestRunSourceConfig>,
 }
@@ -74,6 +82,7 @@ impl fmt::Display for TestRunHostStatus {
 pub struct TestRunHost {
     data_store: Arc<TestDataStore>,
     queries: Arc<RwLock<HashMap<TestRunQueryId, TestRunQuery>>>,
+    reactions: Arc<RwLock<HashMap<TestRunReactionId, TestRunReaction>>>,
     sources: Arc<RwLock<HashMap<TestRunSourceId, Box<dyn TestRunSource + Send + Sync>>>>,
     status: Arc<RwLock<TestRunHostStatus>>,
 }
@@ -88,6 +97,7 @@ impl TestRunHost {
         let test_run_host = TestRunHost {
             data_store,
             queries: Arc::new(RwLock::new(HashMap::new())),
+            reactions: Arc::new(RwLock::new(HashMap::new())),
             sources: Arc::new(RwLock::new(HashMap::new())),
             status: Arc::new(RwLock::new(TestRunHostStatus::Initialized)),
         };
@@ -95,6 +105,11 @@ impl TestRunHost {
         // Add the initial set of Test Run Queries.
         for query_config in config.queries {
             test_run_host.add_test_query(query_config).await?;
+        }
+
+        // Add the initial set of Test Run Reactions.
+        for reaction_config in config.reactions {
+            test_run_host.add_test_reaction(reaction_config).await?;
         }
 
         // Add the initial set of Test Run Sources.
@@ -169,6 +184,78 @@ impl TestRunHost {
         let test_run_query = TestRunQuery::new(definition, output_storage).await?;
 
         queries_lock.insert(id.clone(), test_run_query);
+
+        Ok(id)
+    }
+
+    pub async fn add_test_reaction(
+        &self,
+        test_run_reaction: TestRunReactionConfig,
+    ) -> anyhow::Result<TestRunReactionId> {
+        log::trace!("Adding TestRunReaction from {:?}", test_run_reaction);
+
+        // If the TestRunHost is in an Error state, return an error.
+        if let TestRunHostStatus::Error(msg) = &self.get_status().await? {
+            anyhow::bail!("TestRunHost is in an Error state: {}", msg);
+        };
+
+        let test_run_id = TestRunId::try_from(&test_run_reaction)?;
+        let id = TestRunReactionId::new(&test_run_id, &test_run_reaction.test_reaction_id);
+
+        let mut reactions_lock = self.reactions.write().await;
+
+        // Fail if the TestRunHost already contains a TestRunReaction with the specified Id.
+        if reactions_lock.contains_key(&id) {
+            anyhow::bail!(
+                "TestRunHost already contains TestRunReaction with ID: {:?}",
+                &id
+            );
+        }
+
+        // Get the TestRepoStorage that is associated with the Repo for the TestRunReaction
+        let repo = self
+            .data_store
+            .get_test_repo_storage(&test_run_reaction.test_repo_id)
+            .await?;
+        repo.add_remote_test(&test_run_reaction.test_id, false)
+            .await?;
+
+        // Get the test definition and extract the reaction definition
+        let test_definition = self
+            .data_store
+            .get_test_definition(&test_run_reaction.test_repo_id, &test_run_reaction.test_id)
+            .await?;
+
+        let test_reaction_definition =
+            test_definition.get_test_reaction(&test_run_reaction.test_reaction_id)?;
+
+        let reaction_handler_definition =
+            test_reaction_definition.output_handler.clone().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "No reaction handler defined for reaction {}",
+                    test_run_reaction.test_reaction_id
+                )
+            })?;
+
+        // Get output_loggers from the config
+        let output_loggers = test_run_reaction.output_loggers.clone();
+
+        let definition = TestRunReactionDefinition::new(
+            test_run_reaction,
+            test_reaction_definition.clone(),
+            reaction_handler_definition,
+            output_loggers,
+        )?;
+        log::trace!("TestRunReactionDefinition: {:?}", &definition);
+
+        // Get the OUTPUT storage for the new TestRunReaction.
+        // This is where the TestRunReaction will write the output to.
+        let output_storage = self.data_store.get_test_run_reaction_storage(&id).await?;
+
+        // Create the TestRunReaction and add it to the TestRunHost.
+        let test_run_reaction = TestRunReaction::new(definition, output_storage).await?;
+
+        reactions_lock.insert(id.clone(), test_run_reaction);
 
         Ok(id)
     }
@@ -382,6 +469,81 @@ impl TestRunHost {
         }
     }
 
+    pub async fn get_test_reaction_ids(&self) -> anyhow::Result<Vec<String>> {
+        Ok(self
+            .reactions
+            .read()
+            .await
+            .keys()
+            .map(|id| id.to_string())
+            .collect())
+    }
+
+    pub async fn get_test_reaction_state(
+        &self,
+        test_run_reaction_id: &str,
+    ) -> anyhow::Result<TestRunReactionState> {
+        let test_run_reaction_id = TestRunReactionId::try_from(test_run_reaction_id)?;
+        match self.reactions.read().await.get(&test_run_reaction_id) {
+            Some(reaction) => reaction.get_state().await,
+            None => {
+                anyhow::bail!("TestRunReaction not found: {:?}", test_run_reaction_id);
+            }
+        }
+    }
+
+    pub async fn test_reaction_pause(
+        &self,
+        test_run_reaction_id: &str,
+    ) -> anyhow::Result<ReactionObserverCommandResponse> {
+        let test_run_reaction_id = TestRunReactionId::try_from(test_run_reaction_id)?;
+        match self.reactions.read().await.get(&test_run_reaction_id) {
+            Some(reaction) => reaction.pause_reaction_observer().await,
+            None => {
+                anyhow::bail!("TestRunReaction not found: {:?}", test_run_reaction_id);
+            }
+        }
+    }
+
+    pub async fn test_reaction_reset(
+        &self,
+        test_run_reaction_id: &str,
+    ) -> anyhow::Result<ReactionObserverCommandResponse> {
+        let test_run_reaction_id = TestRunReactionId::try_from(test_run_reaction_id)?;
+        match self.reactions.read().await.get(&test_run_reaction_id) {
+            Some(reaction) => reaction.reset_reaction_observer().await,
+            None => {
+                anyhow::bail!("TestRunReaction not found: {:?}", test_run_reaction_id);
+            }
+        }
+    }
+
+    pub async fn test_reaction_start(
+        &self,
+        test_run_reaction_id: &str,
+    ) -> anyhow::Result<ReactionObserverCommandResponse> {
+        let test_run_reaction_id = TestRunReactionId::try_from(test_run_reaction_id)?;
+        match self.reactions.read().await.get(&test_run_reaction_id) {
+            Some(reaction) => reaction.start_reaction_observer().await,
+            None => {
+                anyhow::bail!("TestRunReaction not found: {:?}", test_run_reaction_id);
+            }
+        }
+    }
+
+    pub async fn test_reaction_stop(
+        &self,
+        test_run_reaction_id: &str,
+    ) -> anyhow::Result<ReactionObserverCommandResponse> {
+        let test_run_reaction_id = TestRunReactionId::try_from(test_run_reaction_id)?;
+        match self.reactions.read().await.get(&test_run_reaction_id) {
+            Some(reaction) => reaction.stop_reaction_observer().await,
+            None => {
+                anyhow::bail!("TestRunReaction not found: {:?}", test_run_reaction_id);
+            }
+        }
+    }
+
     pub async fn test_source_pause(
         &self,
         test_run_source_id: &str,
@@ -492,7 +654,7 @@ mod tests {
 
         assert_eq!(
             test_run_host.get_status().await?,
-            TestRunHostStatus::Initialized
+            TestRunHostStatus::Running
         );
 
         Ok(())

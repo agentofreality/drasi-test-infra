@@ -24,6 +24,9 @@ const QUERY_RESULT_LOG_FOLDER_NAME: &str = "result_stream_log";
 const SOURCES_FOLDER_NAME: &str = "sources";
 const SOURCE_CHANGE_LOG_FOLDER_NAME: &str = "source_change_log";
 
+const REACTIONS_FOLDER_NAME: &str = "reactions";
+const REACTION_OUTPUT_LOG_FOLDER_NAME: &str = "output_log";
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
 pub struct TestRunId {
     pub test_id: String,
@@ -166,6 +169,53 @@ impl TryFrom<&str> for TestRunQueryId {
     }
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
+pub struct TestRunReactionId {
+    pub test_run_id: TestRunId,
+    pub test_reaction_id: String,
+}
+
+impl TestRunReactionId {
+    pub fn new(test_run_id: &TestRunId, test_reaction_id: &str) -> Self {
+        Self {
+            test_run_id: test_run_id.clone(),
+            test_reaction_id: test_reaction_id.to_string(),
+        }
+    }
+}
+
+impl fmt::Display for TestRunReactionId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}.{}", self.test_run_id, self.test_reaction_id)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ParseTestRunReactionIdError {
+    #[error("Invalid format for TestRunReactionId - {0}")]
+    InvalidFormat(String),
+    #[error("Invalid values for TestRunReactionId - {0}")]
+    InvalidValues(String),
+}
+
+impl TryFrom<&str> for TestRunReactionId {
+    type Error = ParseTestRunReactionIdError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let parts: Vec<&str> = value.split('.').collect();
+        if parts.len() == 4 {
+            Ok(Self {
+                test_run_id: TestRunId::new(parts[0], parts[1], parts[2]),
+                test_reaction_id: parts[3].to_string(),
+            })
+        } else {
+            Err(ParseTestRunReactionIdError::InvalidFormat(
+                value.to_string(),
+            ))
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct TestRunStore {
     pub path: PathBuf,
@@ -229,13 +279,14 @@ impl TestRunStore {
         let test_run_path = self.path.join(test_run_id.to_string());
         let queries_path = test_run_path.join(QUERIES_FOLDER_NAME);
         let sources_path = test_run_path.join(SOURCES_FOLDER_NAME);
+        let reactions_path = test_run_path.join(REACTIONS_FOLDER_NAME);
 
         if replace && test_run_path.exists() {
             fs::remove_dir_all(&test_run_path).await?;
         }
 
         if !test_run_path.exists() {
-            fs::create_dir_all(&sources_path).await?;
+            fs::create_dir_all(&test_run_path).await?;
         }
 
         Ok(TestRunStorage {
@@ -243,6 +294,7 @@ impl TestRunStore {
             path: test_run_path,
             queries_path,
             sources_path,
+            reactions_path,
         })
     }
 }
@@ -252,6 +304,7 @@ pub struct TestRunStorage {
     pub path: PathBuf,
     pub queries_path: PathBuf,
     pub sources_path: PathBuf,
+    pub reactions_path: PathBuf,
 }
 
 impl TestRunStorage {
@@ -287,12 +340,14 @@ impl TestRunStorage {
     pub async fn get_query_ids(&self) -> anyhow::Result<Vec<TestRunQueryId>> {
         let mut test_run_queries = Vec::new();
 
-        let mut entries = fs::read_dir(&self.path).await?;
-        while let Some(entry) = entries.next_entry().await? {
-            let metadata = entry.metadata().await?;
-            if metadata.is_dir() {
-                if let Some(folder_name) = entry.file_name().to_str() {
-                    test_run_queries.push(TestRunQueryId::new(&self.id, folder_name));
+        if self.queries_path.exists() {
+            let mut entries = fs::read_dir(&self.queries_path).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                let metadata = entry.metadata().await?;
+                if metadata.is_dir() {
+                    if let Some(folder_name) = entry.file_name().to_str() {
+                        test_run_queries.push(TestRunQueryId::new(&self.id, folder_name));
+                    }
                 }
             }
         }
@@ -332,16 +387,64 @@ impl TestRunStorage {
     pub async fn get_source_ids(&self) -> anyhow::Result<Vec<TestRunSourceId>> {
         let mut test_run_sources = Vec::new();
 
-        let mut entries = fs::read_dir(&self.path).await?;
-        while let Some(entry) = entries.next_entry().await? {
-            let metadata = entry.metadata().await?;
-            if metadata.is_dir() {
-                if let Some(folder_name) = entry.file_name().to_str() {
-                    test_run_sources.push(TestRunSourceId::new(&self.id, folder_name));
+        if self.sources_path.exists() {
+            let mut entries = fs::read_dir(&self.sources_path).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                let metadata = entry.metadata().await?;
+                if metadata.is_dir() {
+                    if let Some(folder_name) = entry.file_name().to_str() {
+                        test_run_sources.push(TestRunSourceId::new(&self.id, folder_name));
+                    }
                 }
             }
         }
         Ok(test_run_sources)
+    }
+
+    pub async fn get_reaction_storage(
+        &self,
+        reaction_id: &TestRunReactionId,
+        replace: bool,
+    ) -> anyhow::Result<TestRunReactionStorage> {
+        log::debug!(
+            "Getting (replace = {}) TestRunReactionStorage for ID: {:?}",
+            replace,
+            reaction_id
+        );
+
+        let reaction_path = self.reactions_path.join(&reaction_id.test_reaction_id);
+        let reaction_output_path = reaction_path.join(REACTION_OUTPUT_LOG_FOLDER_NAME);
+
+        if replace && reaction_path.exists() {
+            fs::remove_dir_all(&reaction_path).await?;
+        }
+
+        if !reaction_path.exists() {
+            fs::create_dir_all(&reaction_output_path).await?;
+        }
+
+        Ok(TestRunReactionStorage {
+            id: reaction_id.clone(),
+            path: reaction_path,
+            reaction_output_path,
+        })
+    }
+
+    pub async fn get_reaction_ids(&self) -> anyhow::Result<Vec<TestRunReactionId>> {
+        let mut test_run_reactions = Vec::new();
+
+        if self.reactions_path.exists() {
+            let mut entries = fs::read_dir(&self.reactions_path).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                let metadata = entry.metadata().await?;
+                if metadata.is_dir() {
+                    if let Some(folder_name) = entry.file_name().to_str() {
+                        test_run_reactions.push(TestRunReactionId::new(&self.id, folder_name));
+                    }
+                }
+            }
+        }
+        Ok(test_run_reactions)
     }
 }
 
@@ -374,3 +477,21 @@ impl TestRunSourceStorage {
         Ok(())
     }
 }
+
+#[derive(Clone, Debug, Serialize)]
+pub struct TestRunReactionStorage {
+    pub id: TestRunReactionId,
+    pub path: PathBuf,
+    pub reaction_output_path: PathBuf,
+}
+
+impl TestRunReactionStorage {
+    pub async fn write_test_run_summary(&self, summary: &Value) -> anyhow::Result<()> {
+        let summary_path = self.path.join("test_run_summary.json");
+        fs::write(summary_path, serde_json::to_string_pretty(summary)?).await?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests;

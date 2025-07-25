@@ -107,6 +107,11 @@ The framework is organized as a Rust workspace with interconnected services:
 4. Dispatch changes according to timing configuration
 5. Collect profiling metrics and results
 
+### Configuration Philosophy
+- **Test Definitions** (stored in repositories): Core test structure including stop triggers that define completion criteria
+- **Runtime Configurations**: Execution-specific settings like loggers that control observability
+- Stop triggers are intrinsic to tests (when to stop), while loggers are runtime concerns (how to observe)
+
 ## Configuration
 
 Test configurations use JSON format. Key sections:

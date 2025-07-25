@@ -15,46 +15,40 @@
 use serde::{Deserialize, Serialize};
 
 use crate::queries::{
-    output_handler_message::{
-        HandlerError, HandlerPayload, HandlerRecord, HandlerType, OutputHandlerMessage,
-    },
-    result_stream_record::QueryResultRecord,
+    result_stream_record::QueryResultRecord, QueryHandlerError, QueryHandlerMessage,
+    QueryHandlerPayload, QueryHandlerRecord, QueryHandlerType,
 };
 
 pub struct RedisStreamReadResult {
     pub dequeue_time_ns: u64,
     pub enqueue_time_ns: u64,
-    pub error: Option<HandlerError>,
+    pub error: Option<QueryHandlerError>,
     pub id: String,
     pub record: Option<RedisStreamRecordData>,
     pub seq: usize,
 }
 
-impl TryInto<OutputHandlerMessage> for RedisStreamReadResult {
+impl TryInto<QueryHandlerMessage> for RedisStreamReadResult {
     type Error = anyhow::Error;
 
-    fn try_into(self) -> Result<OutputHandlerMessage, Self::Error> {
+    fn try_into(self) -> Result<QueryHandlerMessage, Self::Error> {
         match self.record {
             Some(record) => {
-                let handler_record = HandlerRecord {
-                    id: record.id,
-                    sequence: self.seq as u64,
-                    created_time_ns: self.enqueue_time_ns,
-                    processed_time_ns: self.dequeue_time_ns,
-                    traceparent: record.traceparent,
-                    tracestate: record.tracestate,
-                    payload: HandlerPayload::ResultStream {
-                        query_result: record.data,
+                let handler_record = QueryHandlerRecord {
+                    handler_type: QueryHandlerType::RedisStream,
+                    payload: QueryHandlerPayload {
+                        value: serde_json::to_value(&record.data)?,
+                        timestamp: Some(chrono::DateTime::from_timestamp_nanos(
+                            self.dequeue_time_ns as i64,
+                        )),
+                        sequence: Some(self.seq as u64),
                     },
                 };
 
-                Ok(OutputHandlerMessage::Record(handler_record))
+                Ok(QueryHandlerMessage::Record(handler_record))
             }
             None => match self.error {
-                Some(e) => Ok(OutputHandlerMessage::Error {
-                    handler_type: HandlerType::ResultStream,
-                    error: e,
-                }),
+                Some(e) => Ok(QueryHandlerMessage::Error(e)),
                 None => Err(anyhow::anyhow!("No record or error found in stream entry")),
             },
         }

@@ -306,7 +306,7 @@ mod tests {
         drop(data_collector);
 
         // Ensure the Data Store folder was removed.
-        assert_eq!(data_store_path_buf.exists(), false);
+        assert!(!data_store_path_buf.exists());
 
         Ok(())
     }

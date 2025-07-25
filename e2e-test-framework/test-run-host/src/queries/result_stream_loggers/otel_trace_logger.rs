@@ -22,7 +22,7 @@ use tracing_subscriber::{layer::SubscriberExt, Registry};
 
 use test_data_store::test_run_storage::TestRunQueryId;
 
-use crate::queries::output_handler_message::{HandlerPayload, HandlerRecord};
+use crate::common::{HandlerPayload, HandlerRecord};
 
 use super::{ResultStreamLogger, ResultStreamLoggerResult};
 

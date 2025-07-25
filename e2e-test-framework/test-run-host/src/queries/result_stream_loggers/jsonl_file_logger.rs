@@ -24,7 +24,7 @@ use tokio::{
 
 use test_data_store::test_run_storage::{TestRunQueryId, TestRunQueryStorage};
 
-use crate::queries::output_handler_message::HandlerRecord;
+use crate::common::HandlerRecord;
 
 use super::{ResultStreamLogger, ResultStreamLoggerError, ResultStreamLoggerResult};
 

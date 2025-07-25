@@ -18,7 +18,7 @@ use anyhow::Result;
 use tokio::fs::{File, OpenOptions};
 use tokio::io::AsyncWriteExt;
 
-use crate::queries::output_handler_message::HandlerRecord;
+use crate::common::HandlerRecord;
 use crate::queries::result_stream_record::ChangeEvent;
 
 // Component indices for the 2D array

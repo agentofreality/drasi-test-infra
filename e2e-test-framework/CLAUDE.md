@@ -121,3 +121,17 @@ The framework deploys as a Drasi SourceProvider:
 - Test data can include bootstrap files and change scripts
 - Redis is required for query result streaming
 - Dapr sidecar is optional but recommended for distributed scenarios
+
+## Configuration Changes (2025-07-25)
+
+**Breaking Change**: Logger configurations have been moved from test definitions to runtime configurations:
+- Query loggers should now be specified in `TestRunQueryConfig` instead of `TestQueryDefinition`
+- Reaction output loggers should now be specified in `TestRunReactionConfig` instead of `TestReactionDefinition`
+- This allows different logging strategies when running the same test multiple times
+- Test definitions in repositories should only contain the core test structure, not runtime concerns like logging
+
+**Important**: Stop triggers remain in test definitions:
+- Query stop triggers are specified in `TestQueryDefinition.stop_trigger`
+- Reaction stop triggers are specified in `TestReactionDefinition.stop_triggers`
+- Stop triggers define test completion criteria and are intrinsic to the test itself
+- Runtime overrides for stop triggers are available via `TestRunQueryOverrides` and `TestRunReactionOverrides`

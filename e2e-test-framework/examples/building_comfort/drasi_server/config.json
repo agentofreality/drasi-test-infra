@@ -14,21 +14,7 @@
                       "version": 1,
                       "description": "",
                       "test_folder": "building_comfort",
-                      "queries": [
-                        {
-                          "test_query_id": "room-comfort-level",
-                          "reaction_handler": {
-                            "kind": "Http",
-                            "port": 9001,
-                            "path": "/reaction",
-                            "correlation_header": "X-Query-Sequence"
-                          },
-                          "stop_trigger": {
-                            "kind": "RecordCount",
-                            "record_count": 90000
-                          }
-                        }                      
-                      ],
+                      "queries": [],
                       "sources": [
                         {
                           "test_source_id": "facilities-db",
@@ -45,7 +31,7 @@
                           "model_data_generator": {
                             "kind": "BuildingHierarchy",
                             "change_interval": [2000000000, 500000000, 500000000, 4000000000],
-                            "change_count": 100000,
+                            "change_count": 10,
                             "seed": 123456789,
                             "spacing_mode": "none",
                             "time_mode": "2025-01-03T10:03:15.4Z",
@@ -83,6 +69,23 @@
                             { "node_id": "default", "query_id": "building-comfort" }
                           ]
                         }
+                      ],
+                      "reactions": [
+                        {
+                          "test_reaction_id": "building-comfort",
+                          "output_handler": {
+                            "kind": "Http",
+                            "port": 9001,
+                            "path": "/reaction",
+                            "correlation_header": "X-Query-Sequence"
+                          },
+                          "stop_triggers": [
+                            {
+                              "kind": "RecordCount",
+                              "record_count": 2
+                            }
+                          ]
+                        }
                       ]
                     }                 
               ]
@@ -90,35 +93,24 @@
       ]
   },
   "test_run_host": {
-      "queries": [
-        {
-          "test_id": "building_comfort",
-          "test_repo_id": "drasi_server_dev_repo",
-          "test_run_id": "test_run_001",
-          "test_query_id": "room-comfort-level",
-          "start_immediately": true,
-          "loggers": [
-            {
-              "kind": "Profiler",
-              "max_lines_per_file": 15000,
-              "write_bootstrap_log": false,
-              "write_change_image": true,
-              "write_change_log": false,
-              "write_change_rates": true,
-              "write_distributions": true
-            },
-            {
-              "kind": "JsonlFile",
-              "max_lines_per_file": 15000
-            }
-          ],
-          "test_run_overrides" : {
-            "stop_triggerx": {
-              "kind": "RecordSequenceNumber",
-              "record_sequence_number": 18
-            }
+      "queries": [],
+      "reactions": [
+          {
+              "test_id": "building_comfort",
+              "test_repo_id": "drasi_server_dev_repo",
+              "test_run_id": "test_run_001",
+              "test_reaction_id": "building-comfort",
+              "start_immediately": true,
+              "output_loggers": [
+                  {
+                      "kind": "Console"
+                  },
+                  {
+                      "kind": "JsonlFile",
+                      "max_lines_per_file": 15000
+                  }
+              ]
           }
-        }             
       ],
       "sources": [
           {

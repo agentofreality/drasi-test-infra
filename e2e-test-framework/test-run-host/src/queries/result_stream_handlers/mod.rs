@@ -21,7 +21,7 @@ use test_data_store::{
     test_repo_storage::models::ResultStreamHandlerDefinition, test_run_storage::TestRunQueryId,
 };
 
-use super::output_handler_message::OutputHandlerMessage;
+use crate::common::OutputHandlerMessage;
 
 pub mod redis_result_stream_handler;
 
@@ -85,7 +85,7 @@ impl ResultStreamHandler for Box<dyn ResultStreamHandler + Send + Sync> {
 pub async fn create_result_stream_handler(
     id: TestRunQueryId,
     definition: ResultStreamHandlerDefinition,
-) -> anyhow::Result<Box<dyn crate::queries::unified_handler::OutputHandler + Send + Sync>> {
+) -> anyhow::Result<Box<dyn crate::queries::QueryOutputHandler + Send + Sync>> {
     match definition {
         ResultStreamHandlerDefinition::RedisStream(definition) => {
             RedisResultStreamHandler::new(id, definition).await

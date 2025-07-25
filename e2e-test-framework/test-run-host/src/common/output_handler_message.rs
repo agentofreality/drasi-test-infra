@@ -31,7 +31,7 @@
 //! 3. Use conversion methods to transform between legacy and new formats
 //! 4. The query observer handles both formats transparently
 
-use super::result_stream_record::QueryResultRecord;
+use crate::queries::result_stream_record::QueryResultRecord;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -105,6 +105,9 @@ pub enum HandlerPayload {
         request_path: String,
         request_body: serde_json::Value,
         headers: HashMap<String, String>,
+    },
+    ReactionOutput {
+        reaction_output: serde_json::Value,
     },
 }
 

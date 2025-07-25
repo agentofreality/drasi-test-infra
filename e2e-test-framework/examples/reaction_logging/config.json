@@ -1,0 +1,54 @@
+{
+  "repo": {
+    "url": "../test_data/basic_reaction_test",
+    "auth": {}
+  },
+  "sources": [
+    {
+      "id": "population",
+      "name": "Population Data Source",
+      "config": {
+        "dispatcher": "dapr",
+        "time_spacing_mode": "live",
+        "time_spacing_amount": 1,
+        "sequence_number_checkpoint": null
+      }
+    }
+  ],
+  "queries": [
+    {
+      "id": "population-query",
+      "name": "Population Query",
+      "profiling": true,
+      "stop_triggers": [
+        {
+          "type": "record_count",
+          "value": 100
+        }
+      ]
+    }
+  ],
+  "reactions": [
+    {
+      "test_id": "basic-reaction-test",
+      "test_repo_id": "local",
+      "test_reaction_id": "http-reaction",
+      "start_immediately": true,
+      "loggers": [
+        {
+          "type": "jsonl_file",
+          "output_folder": "reaction_invocations"
+        },
+        {
+          "type": "console"
+        }
+      ]
+    }
+  ],
+  "run": {
+    "timing_mode": "live",
+    "dispatcher": "dapr",
+    "test_id": "reaction-logging-example",
+    "test_repo_id": "local"
+  }
+}

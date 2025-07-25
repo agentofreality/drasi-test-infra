@@ -28,6 +28,7 @@ use utoipa::{OpenApi, ToSchema};
 
 use data_collector::DataCollector;
 use queries::get_queries_routes;
+use reactions::get_reactions_routes;
 use repo::get_test_repo_routes;
 use sources::get_sources_routes;
 use test_data_store::TestDataStore;
@@ -37,6 +38,7 @@ use utoipa_swagger_ui::SwaggerUi;
 use crate::openapi::ApiDoc;
 
 pub mod queries;
+pub mod reactions;
 pub mod repo;
 pub mod sources;
 
@@ -114,6 +116,7 @@ impl IntoResponse for TestServiceWebApiError {
     "test_run_host": {
         "status": "Active",
         "test_run_query_ids": ["query-1", "query-2"],
+        "test_run_reaction_ids": ["reaction-1", "reaction-2"],
         "test_run_source_ids": ["source-1", "source-2"]
     }
 }))]
@@ -142,6 +145,7 @@ pub struct TestDataStoreStateResponse {
 #[schema(example = json!({
     "status": "Active",
     "test_run_query_ids": ["query-1", "query-2"],
+    "test_run_reaction_ids": ["reaction-1", "reaction-2"],
     "test_run_source_ids": ["source-1", "source-2"]
 }))]
 pub struct TestRunHostStateResponse {
@@ -149,6 +153,8 @@ pub struct TestRunHostStateResponse {
     pub status: String,
     /// List of active test run query IDs
     pub test_run_query_ids: Vec<String>,
+    /// List of active test run reaction IDs
+    pub test_run_reaction_ids: Vec<String>,
     /// List of active test run source IDs
     pub test_run_source_ids: Vec<String>,
 }
@@ -178,6 +184,7 @@ pub(crate) async fn start_web_api(
         .route("/", get(get_service_info_handler))
         .nest("/test_repos", get_test_repo_routes())
         .nest("/test_run_host", get_queries_routes())
+        .nest("/test_run_host", get_reactions_routes())
         .nest("/test_run_host", get_sources_routes());
 
     // Create the complete application with Swagger UI
@@ -267,6 +274,7 @@ async fn get_service_info_handler(
         test_run_host: TestRunHostStateResponse {
             status: test_run_host.get_status().await?.to_string(),
             test_run_query_ids: test_run_host.get_test_query_ids().await?,
+            test_run_reaction_ids: test_run_host.get_test_reaction_ids().await?,
             test_run_source_ids: test_run_host.get_test_source_ids().await?,
         },
         data_collector: DataCollectorStateResponse {
