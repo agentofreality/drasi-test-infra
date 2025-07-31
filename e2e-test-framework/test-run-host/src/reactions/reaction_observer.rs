@@ -577,6 +577,15 @@ impl ReactionObserver {
             ReactionObserverCommand::Stop => self.stop().await,
         }
     }
+
+    /// Sets the TestRunHost for handlers that need it (e.g., DrasiServerChannelHandler)
+    pub fn set_test_run_host(&self, test_run_host: std::sync::Arc<crate::TestRunHost>) {
+        // Clone the handler reference to move into the async block
+        let handler = self.output_handler.clone();
+        tokio::spawn(async move {
+            handler.set_test_run_host(test_run_host).await;
+        });
+    }
 }
 
 async fn observe_reaction_handler(
@@ -605,7 +614,7 @@ async fn observe_reaction_handler(
                             if let Ok(true) = trigger.is_true(&handler_status, &state.metrics).await {
                                 log::info!("Stop trigger fired, stopping reaction observer");
                                 state.status = ReactionObserverStatus::Stopped;
-                                
+
                                 // Close loggers and collect results before stopping
                                 let mut results = Vec::new();
                                 for logger in &mut state.loggers {
@@ -615,13 +624,13 @@ async fn observe_reaction_handler(
                                 }
                                 state.logger_results.extend(results);
                                 state.loggers.clear();
-                                
+
                                 // Record stop time
                                 state.metrics.observer_stop_time_ns = SystemTime::now()
                                     .duration_since(SystemTime::UNIX_EPOCH)
                                     .unwrap()
                                     .as_nanos() as u64;
-                                
+
                                 output_handler.stop().await.ok();
                                 return;
                             }

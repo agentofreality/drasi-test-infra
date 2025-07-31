@@ -135,3 +135,22 @@ The framework deploys as a Drasi SourceProvider:
 - Reaction stop triggers are specified in `TestReactionDefinition.stop_triggers`
 - Stop triggers define test completion criteria and are intrinsic to the test itself
 - Runtime overrides for stop triggers are available via `TestRunQueryOverrides` and `TestRunReactionOverrides`
+
+## Drasi Server Full Configuration (2025-07-28)
+
+**New Feature**: Drasi Servers can now be fully configured with Sources, Queries, and Reactions:
+- Add `sources`, `queries`, and `reactions` arrays to `DrasiServerConfig`
+- TestSources can send data to configured sources via `DrasiServerChannel` dispatcher
+- TestReactions can receive data from configured reactions via `DrasiServerChannel` handler
+- The framework validates that TestSource/TestReaction IDs match configured component names
+- See `examples/building_comfort/drasi_server_internal` for a complete example
+
+## DrasiServerCore Integration (2025-07-29)
+
+**Architecture Note**: The test infrastructure uses `DrasiServerCore` instead of `DrasiServer`:
+- DrasiServerCore contains only the Source, Query, and Reaction functionality needed for testing
+- The Test Service provides its own REST API that wraps DrasiServerCore's programmatic API
+- The `api_endpoint` field will always return `None` as DrasiServerCore doesn't expose a Web API
+- Port configuration is preserved in test definitions for compatibility but is not used internally
+- All component management (sources, queries, reactions) is done through DrasiServerCore's managers
+- Starting queries and reactions through the API returns an error as these operations are managed automatically by DrasiServerCore

@@ -304,6 +304,12 @@ impl SourceChangeGenerator for ScriptSourceChangeGenerator {
         self.send_command(ScriptSourceChangeGeneratorCommand::Stop)
             .await
     }
+
+    fn set_test_run_host_on_dispatchers(&self, _test_run_host: std::sync::Arc<crate::TestRunHost>) {
+        // This generator uses a thread-based architecture, so we can't directly access dispatchers
+        // The TestRunHost will be set when the dispatchers are recreated on reset
+        log::warn!("ScriptSourceChangeGenerator: set_test_run_host_on_dispatchers called but not implemented - dispatchers are in separate thread");
+    }
 }
 
 #[derive(Debug, Serialize)]

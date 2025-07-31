@@ -14,3 +14,6 @@ members = [
 ]
 
 resolver = "2"
+
+[workspace.dependencies]
+drasi-server = { path = "/Users/allenjones/dev/agentofreality/drasi/drasi-server" }

@@ -87,10 +87,10 @@ impl OutputLogger for ConsoleOutputLogger {
         let time = Local::now().format(&self.settings.date_time_format);
 
         match &record.payload {
-            HandlerPayload::ReactionInvocation { 
-                reaction_type, 
-                query_id, 
-                request_method, 
+            HandlerPayload::ReactionInvocation {
+                reaction_type,
+                query_id,
+                request_method,
                 request_path,
                 request_body,
                 headers,

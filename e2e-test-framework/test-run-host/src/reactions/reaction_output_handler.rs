@@ -182,6 +182,11 @@ pub trait ReactionOutputHandler: Send + Sync {
     async fn metrics(&self) -> Option<serde_json::Value> {
         None
     }
+
+    /// Set the TestRunHost for handlers that need it (default implementation does nothing)
+    async fn set_test_run_host(&self, _test_run_host: std::sync::Arc<crate::TestRunHost>) {
+        // Default implementation does nothing - only some handlers need this
+    }
 }
 
 /// Implement ReactionOutputHandler for boxed trait objects
@@ -210,6 +215,10 @@ impl ReactionOutputHandler for Box<dyn ReactionOutputHandler + Send + Sync> {
     async fn metrics(&self) -> Option<serde_json::Value> {
         (**self).metrics().await
     }
+
+    async fn set_test_run_host(&self, test_run_host: std::sync::Arc<crate::TestRunHost>) {
+        (**self).set_test_run_host(test_run_host).await
+    }
 }
 
 use test_data_store::{
@@ -232,6 +241,18 @@ pub async fn create_reaction_handler(
         }
         ReactionHandlerDefinition::EventGrid(_) => {
             unimplemented!("EventGridReactionHandler is not implemented yet")
+        }
+        ReactionHandlerDefinition::DrasiServerCallback(def) => {
+            use super::reaction_handlers::drasi_server_callback_handler::DrasiServerCallbackHandler;
+            DrasiServerCallbackHandler::new(id, def)
+                .await
+                .map(|h| h as Box<dyn ReactionOutputHandler + Send + Sync>)
+        }
+        ReactionHandlerDefinition::DrasiServerChannel(def) => {
+            use super::reaction_handlers::drasi_server_channel_handler::DrasiServerChannelHandler;
+            DrasiServerChannelHandler::new(id, def)
+                .await
+                .map(|h| h as Box<dyn ReactionOutputHandler + Send + Sync>)
         }
     }
 }

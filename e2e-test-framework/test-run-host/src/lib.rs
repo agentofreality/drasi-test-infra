@@ -22,6 +22,10 @@ use derive_more::Debug;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
+use drasi_servers::{
+    TestRunDrasiServer, TestRunDrasiServerConfig, TestRunDrasiServerDefinition,
+    TestRunDrasiServerState,
+};
 use queries::{
     query_result_observer::QueryResultObserverCommandResponse,
     result_stream_loggers::ResultStreamLoggerResult, TestRunQuery, TestRunQueryConfig,
@@ -33,22 +37,31 @@ use reactions::{
 };
 use sources::{
     bootstrap_data_generators::BootstrapData, create_test_run_source,
-    source_change_generators::SourceChangeGeneratorCommandResponse, TestRunSource,
+    source_change_generators::SourceChangeGeneratorCommandResponse, SourceStartMode, TestRunSource,
     TestRunSourceConfig, TestRunSourceState,
 };
 use test_data_store::{
     test_repo_storage::models::SpacingMode,
-    test_run_storage::{TestRunId, TestRunQueryId, TestRunReactionId, TestRunSourceId},
+    test_run_storage::{
+        TestRunDrasiServerId, TestRunId, TestRunQueryId, TestRunReactionId, TestRunSourceId,
+    },
     TestDataStore,
 };
 
 pub mod common;
+pub mod drasi_server_api_impl;
+pub mod drasi_servers;
 pub mod queries;
 pub mod reactions;
 pub mod sources;
 
+// Re-export api_models for use by test-service
+pub use drasi_servers::api_models;
+
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct TestRunHostConfig {
+    #[serde(default)]
+    pub drasi_servers: Vec<TestRunDrasiServerConfig>,
     #[serde(default)]
     pub queries: Vec<TestRunQueryConfig>,
     #[serde(default)]
@@ -81,6 +94,7 @@ impl fmt::Display for TestRunHostStatus {
 #[derive(Debug)]
 pub struct TestRunHost {
     data_store: Arc<TestDataStore>,
+    drasi_servers: Arc<RwLock<HashMap<TestRunDrasiServerId, TestRunDrasiServer>>>,
     queries: Arc<RwLock<HashMap<TestRunQueryId, TestRunQuery>>>,
     reactions: Arc<RwLock<HashMap<TestRunReactionId, TestRunReaction>>>,
     sources: Arc<RwLock<HashMap<TestRunSourceId, Box<dyn TestRunSource + Send + Sync>>>>,
@@ -96,11 +110,22 @@ impl TestRunHost {
 
         let test_run_host = TestRunHost {
             data_store,
+            drasi_servers: Arc::new(RwLock::new(HashMap::new())),
             queries: Arc::new(RwLock::new(HashMap::new())),
             reactions: Arc::new(RwLock::new(HashMap::new())),
             sources: Arc::new(RwLock::new(HashMap::new())),
             status: Arc::new(RwLock::new(TestRunHostStatus::Initialized)),
         };
+
+        // Add the initial set of Drasi Servers (must be started before sources/queries).
+        if !config.drasi_servers.is_empty() {
+            log::info!("Initializing {} Drasi Server(s) first to ensure availability for dependent resources", config.drasi_servers.len());
+        }
+        for drasi_server_config in config.drasi_servers {
+            test_run_host
+                .add_test_drasi_server(drasi_server_config)
+                .await?;
+        }
 
         // Add the initial set of Test Run Queries.
         for query_config in config.queries {
@@ -137,6 +162,46 @@ impl TestRunHost {
         };
 
         Ok(test_run_host)
+    }
+
+    pub async fn initialize_sources(&self, self_ref: Arc<Self>) -> anyhow::Result<()> {
+        log::info!("Initializing sources with TestRunHost reference");
+
+        // Set TestRunHost on all sources
+        let sources = self.sources.read().await;
+        for (source_id, source) in sources.iter() {
+            log::debug!("Setting TestRunHost on source {:?}", source_id);
+            source.set_test_run_host(self_ref.clone());
+        }
+        drop(sources);
+
+        // Start auto-start sources
+        let sources = self.sources.read().await;
+        for (source_id, source) in sources.iter() {
+            let state = source.get_state().await?;
+            if state.start_mode == SourceStartMode::Auto {
+                log::info!("Auto-starting source {:?}", source_id);
+                source.start_source_change_generator().await?;
+            }
+        }
+        drop(sources);
+
+        // Set TestRunHost on all reactions (for handlers that need it)
+        let reactions = self.reactions.read().await;
+        for (reaction_id, reaction) in reactions.iter() {
+            log::debug!("Setting TestRunHost on reaction {:?}", reaction_id);
+            reaction.set_test_run_host(self_ref.clone());
+        }
+
+        // Start reactions with start_immediately
+        for (reaction_id, reaction) in reactions.iter() {
+            if reaction.start_immediately {
+                log::info!("Auto-starting reaction {:?}", reaction_id);
+                reaction.start_reaction_observer().await?;
+            }
+        }
+
+        Ok(())
     }
 
     pub async fn add_test_query(
@@ -229,8 +294,10 @@ impl TestRunHost {
         let test_reaction_definition =
             test_definition.get_test_reaction(&test_run_reaction.test_reaction_id)?;
 
-        let reaction_handler_definition =
-            test_reaction_definition.output_handler.clone().ok_or_else(|| {
+        let reaction_handler_definition = test_reaction_definition
+            .output_handler
+            .clone()
+            .ok_or_else(|| {
                 anyhow::anyhow!(
                     "No reaction handler defined for reaction {}",
                     test_run_reaction.test_reaction_id
@@ -632,6 +699,135 @@ impl TestRunHost {
                 anyhow::bail!("TestRunSource not found: {:?}", test_run_source_id);
             }
         }
+    }
+
+    pub async fn add_test_drasi_server(
+        &self,
+        test_run_drasi_server: TestRunDrasiServerConfig,
+    ) -> anyhow::Result<TestRunDrasiServerId> {
+        log::trace!("Adding TestRunDrasiServer from {:?}", test_run_drasi_server);
+
+        // If the TestRunHost is in an Error state, return an error.
+        if let TestRunHostStatus::Error(msg) = &self.get_status().await? {
+            anyhow::bail!("TestRunHost is in an Error state: {}", msg);
+        };
+
+        let id = TestRunDrasiServerId::try_from(&test_run_drasi_server)?;
+
+        let mut drasi_servers_lock = self.drasi_servers.write().await;
+
+        // Fail if the TestRunHost already contains a TestRunDrasiServer with the specified Id.
+        if drasi_servers_lock.contains_key(&id) {
+            anyhow::bail!(
+                "TestRunHost already contains TestRunDrasiServer with ID: {:?}",
+                &id
+            );
+        }
+
+        // Get the test definition and extract the drasi server definition
+        // Note: Local tests are already loaded when the repository is initialized,
+        // so we don't need to call add_remote_test here
+        let test_definition = self
+            .data_store
+            .get_test_definition(
+                &test_run_drasi_server.test_repo_id,
+                &test_run_drasi_server.test_id,
+            )
+            .await?;
+
+        let test_drasi_server_definition = test_definition
+            .drasi_servers
+            .iter()
+            .find(|s| s.id == test_run_drasi_server.test_drasi_server_id)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Drasi server definition not found: {}",
+                    test_run_drasi_server.test_drasi_server_id
+                )
+            })?
+            .clone();
+
+        let definition =
+            TestRunDrasiServerDefinition::new(test_run_drasi_server, test_drasi_server_definition)?;
+        log::trace!("TestRunDrasiServerDefinition: {:?}", &definition);
+
+        // Get the OUTPUT storage for the new TestRunDrasiServer.
+        let output_storage = self
+            .data_store
+            .get_test_run_drasi_server_storage(&id)
+            .await?;
+
+        // Create the TestRunDrasiServer and add it to the TestRunHost.
+        let test_run_drasi_server = TestRunDrasiServer::new(definition, output_storage).await?;
+
+        drasi_servers_lock.insert(id.clone(), test_run_drasi_server);
+
+        Ok(id)
+    }
+
+    pub async fn get_test_drasi_server(
+        &self,
+        test_run_drasi_server_id: &TestRunDrasiServerId,
+    ) -> anyhow::Result<Option<TestRunDrasiServerState>> {
+        match self
+            .drasi_servers
+            .read()
+            .await
+            .get(test_run_drasi_server_id)
+        {
+            Some(server) => Ok(Some(server.get_state().await)),
+            None => Ok(None),
+        }
+    }
+
+    pub async fn remove_test_drasi_server(
+        &self,
+        test_run_drasi_server_id: &TestRunDrasiServerId,
+    ) -> anyhow::Result<()> {
+        let mut drasi_servers_lock = self.drasi_servers.write().await;
+
+        if let Some(server) = drasi_servers_lock.remove(test_run_drasi_server_id) {
+            // Stop the server if it's running
+            if matches!(
+                server.get_state().await,
+                TestRunDrasiServerState::Running { .. }
+            ) {
+                server
+                    .stop(Some("Removing from TestRunHost".to_string()))
+                    .await?;
+            }
+            Ok(())
+        } else {
+            anyhow::bail!(
+                "TestRunDrasiServer not found: {:?}",
+                test_run_drasi_server_id
+            );
+        }
+    }
+
+    pub async fn get_drasi_server_endpoint(
+        &self,
+        test_run_drasi_server_id: &TestRunDrasiServerId,
+    ) -> anyhow::Result<Option<String>> {
+        match self
+            .drasi_servers
+            .read()
+            .await
+            .get(test_run_drasi_server_id)
+        {
+            Some(server) => Ok(server.get_api_endpoint().await),
+            None => Ok(None),
+        }
+    }
+
+    pub async fn get_test_drasi_server_ids(&self) -> anyhow::Result<Vec<String>> {
+        Ok(self
+            .drasi_servers
+            .read()
+            .await
+            .keys()
+            .map(|id| id.to_string())
+            .collect())
     }
 }
 

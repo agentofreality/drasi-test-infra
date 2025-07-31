@@ -105,6 +105,7 @@ pub struct BuildingHierarchyDataGeneratorSettings {
     pub seed: u64,
     pub spacing_mode: SpacingMode,
     pub time_mode: TimeMode,
+    pub send_initial_inserts: bool,
 }
 
 impl BuildingHierarchyDataGeneratorSettings {
@@ -134,6 +135,7 @@ impl BuildingHierarchyDataGeneratorSettings {
             seed: definition.common.seed.unwrap_or(rand::rng().random()),
             spacing_mode: definition.common.spacing_mode,
             time_mode: definition.common.time_mode,
+            send_initial_inserts: definition.send_initial_inserts,
         })
     }
 
@@ -165,6 +167,10 @@ pub enum BuildingHierarchyDataGeneratorCommand {
     },
     // Command to stop the BuildingHierarchyDataGenerator.
     Stop,
+    // Command to set TestRunHost on dispatchers
+    SetTestRunHost {
+        test_run_host: std::sync::Arc<crate::TestRunHost>,
+    },
 }
 
 // Struct for messages sent to the BuildingHierarchyDataGenerator from the functions in the Web API.
@@ -456,6 +462,27 @@ impl SourceChangeGenerator for BuildingHierarchyDataGenerator {
         self.send_command(BuildingHierarchyDataGeneratorCommand::Stop)
             .await
     }
+
+    fn set_test_run_host_on_dispatchers(&self, test_run_host: std::sync::Arc<crate::TestRunHost>) {
+        // Send command to thread to set TestRunHost on dispatchers
+        log::info!("BuildingHierarchyDataGenerator: Sending SetTestRunHost command to thread");
+
+        // Use a blocking task to send the command since this is a sync function
+        let tx = self.model_host_tx_channel.clone();
+        let command = BuildingHierarchyDataGeneratorCommand::SetTestRunHost { test_run_host };
+
+        tokio::task::spawn(async move {
+            if let Err(e) = tx
+                .send(BuildingHierarchyDataGeneratorMessage {
+                    command,
+                    response_tx: None,
+                })
+                .await
+            {
+                log::error!("Failed to send SetTestRunHost command: {}", e);
+            }
+        });
+    }
 }
 
 struct ChangeIntervalGenerator {
@@ -630,6 +657,171 @@ impl BuildingHierarchyDataGeneratorInternalState {
         // Wait for all of them to complete
         // TODO - Handle errors properly.
         let _ = join_all(futures).await;
+    }
+    
+    async fn send_initial_inserts(&mut self) -> anyhow::Result<()> {
+        log::info!("Sending initial insert events for TestRunSource {}", self.settings.id);
+        
+        // Get current time
+        let now_ns = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+        
+        // Get all nodes and relations from current state
+        let building_graph = self.building_graph.lock().await;
+        let all_labels = HashSet::new(); // Empty set to get all elements
+        
+        // Collect all insert events
+        let mut insert_events = Vec::new();
+        
+        // Process nodes
+        for change in building_graph.get_current_state(&all_labels) {
+            let event = match change {
+                ModelChange::BuildingAdded(building) => {
+                    Some(SourceChangeEvent {
+                        op: "i".to_string(),
+                        reactivator_start_ns: now_ns,
+                        reactivator_end_ns: 0,
+                        payload: SourceChangeEventPayload {
+                            source: SourceChangeEventSourceInfo {
+                                db: self.settings.id.test_source_id.to_string(),
+                                lsn: self.event_seq_num,
+                                table: "node".to_string(),
+                                ts_ns: self.virtual_time_ns_current,
+                            },
+                            before: serde_json::Value::Null,
+                            after: serde_json::json!({
+                                "id": building.id,
+                                "labels": building.labels,
+                                "properties": {}
+                            }),
+                        },
+                    })
+                },
+                ModelChange::FloorAdded(floor) => {
+                    Some(SourceChangeEvent {
+                        op: "i".to_string(),
+                        reactivator_start_ns: now_ns,
+                        reactivator_end_ns: 0,
+                        payload: SourceChangeEventPayload {
+                            source: SourceChangeEventSourceInfo {
+                                db: self.settings.id.test_source_id.to_string(),
+                                lsn: self.event_seq_num,
+                                table: "node".to_string(),
+                                ts_ns: self.virtual_time_ns_current,
+                            },
+                            before: serde_json::Value::Null,
+                            after: serde_json::json!({
+                                "id": floor.id,
+                                "labels": floor.labels,
+                                "properties": {}
+                            }),
+                        },
+                    })
+                },
+                ModelChange::RoomAdded(room) => {
+                    Some(SourceChangeEvent {
+                        op: "i".to_string(),
+                        reactivator_start_ns: now_ns,
+                        reactivator_end_ns: 0,
+                        payload: SourceChangeEventPayload {
+                            source: SourceChangeEventSourceInfo {
+                                db: self.settings.id.test_source_id.to_string(),
+                                lsn: self.event_seq_num,
+                                table: "node".to_string(),
+                                ts_ns: self.virtual_time_ns_current,
+                            },
+                            before: serde_json::Value::Null,
+                            after: serde_json::json!({
+                                "id": room.id,
+                                "labels": room.labels,
+                                "properties": room.properties
+                            }),
+                        },
+                    })
+                },
+                ModelChange::BuildingFloorRelationAdded(relation) => {
+                    Some(SourceChangeEvent {
+                        op: "i".to_string(),
+                        reactivator_start_ns: now_ns,
+                        reactivator_end_ns: 0,
+                        payload: SourceChangeEventPayload {
+                            source: SourceChangeEventSourceInfo {
+                                db: self.settings.id.test_source_id.to_string(),
+                                lsn: self.event_seq_num,
+                                table: "relation".to_string(),
+                                ts_ns: self.virtual_time_ns_current,
+                            },
+                            before: serde_json::Value::Null,
+                            after: serde_json::json!({
+                                "id": relation.id,
+                                "labels": relation.labels,
+                                "properties": {},
+                                "start_id": relation.building_id,
+                                "end_id": relation.floor_id
+                            }),
+                        },
+                    })
+                },
+                ModelChange::FloorRoomRelationAdded(relation) => {
+                    Some(SourceChangeEvent {
+                        op: "i".to_string(),
+                        reactivator_start_ns: now_ns,
+                        reactivator_end_ns: 0,
+                        payload: SourceChangeEventPayload {
+                            source: SourceChangeEventSourceInfo {
+                                db: self.settings.id.test_source_id.to_string(),
+                                lsn: self.event_seq_num,
+                                table: "relation".to_string(),
+                                ts_ns: self.virtual_time_ns_current,
+                            },
+                            before: serde_json::Value::Null,
+                            after: serde_json::json!({
+                                "id": relation.id,
+                                "labels": relation.labels,
+                                "properties": {},
+                                "start_id": relation.floor_id,
+                                "end_id": relation.room_id
+                            }),
+                        },
+                    })
+                },
+                _ => None,
+            };
+            
+            if let Some(event) = event {
+                insert_events.push(event);
+                self.event_seq_num += 1;
+            }
+        }
+        
+        drop(building_graph);
+        
+        // Dispatch all insert events
+        if !insert_events.is_empty() {
+            log::info!("Dispatching {} initial insert events", insert_events.len());
+            let events_refs: Vec<&SourceChangeEvent> = insert_events.iter().collect();
+            self.dispatch_source_change_events(events_refs).await;
+            self.stats.num_source_change_events += insert_events.len() as u64;
+        }
+        
+        Ok(())
+    }
+
+    fn set_test_run_host_on_dispatchers(
+        &mut self,
+        test_run_host: std::sync::Arc<crate::TestRunHost>,
+    ) {
+        log::info!(
+            "Setting TestRunHost on {} dispatchers for source {}",
+            self.dispatchers.len(),
+            self.settings.id
+        );
+
+        for dispatcher in self.dispatchers.iter_mut() {
+            dispatcher.set_test_run_host(test_run_host.clone());
+        }
     }
 
     async fn dispatch_source_change_events(&mut self, events: Vec<&SourceChangeEvent>) {
@@ -1000,10 +1192,13 @@ impl BuildingHierarchyDataGeneratorInternalState {
             command
         );
 
-        if let BuildingHierarchyDataGeneratorCommand::Reset = command {
-            self.reset().await
-        } else {
-            Err(BuildingHierarchyDataGeneratorError::Error(self.status).into())
+        match command {
+            BuildingHierarchyDataGeneratorCommand::Reset => self.reset().await,
+            BuildingHierarchyDataGeneratorCommand::SetTestRunHost { test_run_host } => {
+                self.set_test_run_host_on_dispatchers(test_run_host.clone());
+                Ok(())
+            }
+            _ => Err(BuildingHierarchyDataGeneratorError::Error(self.status).into()),
         }
     }
 
@@ -1017,10 +1212,13 @@ impl BuildingHierarchyDataGeneratorInternalState {
             command
         );
 
-        if let BuildingHierarchyDataGeneratorCommand::Reset = command {
-            self.reset().await
-        } else {
-            Err(BuildingHierarchyDataGeneratorError::AlreadyFinished.into())
+        match command {
+            BuildingHierarchyDataGeneratorCommand::Reset => self.reset().await,
+            BuildingHierarchyDataGeneratorCommand::SetTestRunHost { test_run_host } => {
+                self.set_test_run_host_on_dispatchers(test_run_host.clone());
+                Ok(())
+            }
+            _ => Err(BuildingHierarchyDataGeneratorError::AlreadyFinished.into()),
         }
     }
 
@@ -1054,6 +1252,14 @@ impl BuildingHierarchyDataGeneratorInternalState {
                 log::info!("Script Started for TestRunSource {}", self.settings.id);
 
                 self.status = SourceChangeGeneratorStatus::Running;
+                
+                // If send_initial_inserts is true, send insert events for all current state
+                if self.settings.send_initial_inserts {
+                    if let Err(e) = self.send_initial_inserts().await {
+                        log::error!("Failed to send initial inserts: {}", e);
+                    }
+                }
+                
                 self.schedule_next_change_event().await
             }
             BuildingHierarchyDataGeneratorCommand::Step { steps, .. } => {
@@ -1070,6 +1276,10 @@ impl BuildingHierarchyDataGeneratorInternalState {
             }
             BuildingHierarchyDataGeneratorCommand::Stop => {
                 self.transition_to_stopped_state().await;
+                Ok(())
+            }
+            BuildingHierarchyDataGeneratorCommand::SetTestRunHost { test_run_host } => {
+                self.set_test_run_host_on_dispatchers(test_run_host.clone());
                 Ok(())
             }
         }
@@ -1105,6 +1315,10 @@ impl BuildingHierarchyDataGeneratorInternalState {
                 self.transition_to_stopped_state().await;
                 Ok(())
             }
+            BuildingHierarchyDataGeneratorCommand::SetTestRunHost { test_run_host } => {
+                self.set_test_run_host_on_dispatchers(test_run_host.clone());
+                Ok(())
+            }
         }
     }
 
@@ -1135,6 +1349,10 @@ impl BuildingHierarchyDataGeneratorInternalState {
             | BuildingHierarchyDataGeneratorCommand::Step { .. } => Err(
                 BuildingHierarchyDataGeneratorError::CurrentlySkipping(self.skips_remaining).into(),
             ),
+            BuildingHierarchyDataGeneratorCommand::SetTestRunHost { test_run_host } => {
+                self.set_test_run_host_on_dispatchers(test_run_host.clone());
+                Ok(())
+            }
         }
     }
 
@@ -1165,6 +1383,10 @@ impl BuildingHierarchyDataGeneratorInternalState {
             | BuildingHierarchyDataGeneratorCommand::Step { .. } => Err(
                 BuildingHierarchyDataGeneratorError::CurrentlyStepping(self.steps_remaining).into(),
             ),
+            BuildingHierarchyDataGeneratorCommand::SetTestRunHost { test_run_host } => {
+                self.set_test_run_host_on_dispatchers(test_run_host.clone());
+                Ok(())
+            }
         }
     }
 
@@ -1178,10 +1400,13 @@ impl BuildingHierarchyDataGeneratorInternalState {
             command
         );
 
-        if let BuildingHierarchyDataGeneratorCommand::Reset = command {
-            self.reset().await
-        } else {
-            Err(BuildingHierarchyDataGeneratorError::AlreadyStopped.into())
+        match command {
+            BuildingHierarchyDataGeneratorCommand::Reset => self.reset().await,
+            BuildingHierarchyDataGeneratorCommand::SetTestRunHost { test_run_host } => {
+                self.set_test_run_host_on_dispatchers(test_run_host.clone());
+                Ok(())
+            }
+            _ => Err(BuildingHierarchyDataGeneratorError::AlreadyStopped.into()),
         }
     }
 

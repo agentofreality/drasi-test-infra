@@ -19,9 +19,7 @@ mod tests {
     use std::sync::Arc;
     use tempfile::TempDir;
     use test_data_store::{
-        test_repo_storage::models::{
-            HttpReactionHandlerDefinition, ReactionHandlerDefinition,
-        },
+        test_repo_storage::models::{HttpReactionHandlerDefinition, ReactionHandlerDefinition},
         test_run_storage::{TestRunId, TestRunReactionId, TestRunReactionStorage},
         TestDataStore,
     };
@@ -120,24 +118,21 @@ mod tests {
 
         // Configure multiple loggers as OutputLoggerConfig
         let output_loggers = vec![
-            OutputLoggerConfig::JsonlFile(
-                JsonlFileOutputLoggerConfig {
-                    max_lines_per_file: Some(10000),
-                },
-            ),
-            OutputLoggerConfig::Console(
-                output_loggers::ConsoleOutputLoggerConfig {
-                    date_time_format: None,
-                },
-            ),
+            OutputLoggerConfig::JsonlFile(JsonlFileOutputLoggerConfig {
+                max_lines_per_file: Some(10000),
+            }),
+            OutputLoggerConfig::Console(output_loggers::ConsoleOutputLoggerConfig {
+                date_time_format: None,
+            }),
         ];
 
         // Create test reaction definition with stop triggers
-        let test_reaction_def = test_data_store::test_repo_storage::models::TestReactionDefinition {
-            test_reaction_id: "reaction-001".to_string(),
-            output_handler: Some(handler_def.clone()),
-            stop_triggers: Some(vec![]), // Empty stop triggers for this test
-        };
+        let test_reaction_def =
+            test_data_store::test_repo_storage::models::TestReactionDefinition {
+                test_reaction_id: "reaction-001".to_string(),
+                output_handler: Some(handler_def.clone()),
+                stop_triggers: Some(vec![]), // Empty stop triggers for this test
+            };
 
         // Create test run reaction
         let definition = TestRunReactionDefinition {
@@ -217,11 +212,12 @@ mod tests {
         });
 
         // Create test reaction definition
-        let test_reaction_def = test_data_store::test_repo_storage::models::TestReactionDefinition {
-            test_reaction_id: "reaction-001".to_string(),
-            output_handler: Some(handler_def.clone()),
-            stop_triggers: Some(vec![]), // Empty stop triggers for this test
-        };
+        let test_reaction_def =
+            test_data_store::test_repo_storage::models::TestReactionDefinition {
+                test_reaction_id: "reaction-001".to_string(),
+                output_handler: Some(handler_def.clone()),
+                stop_triggers: Some(vec![]), // Empty stop triggers for this test
+            };
 
         let definition = TestRunReactionDefinition {
             id: reaction_id.clone(),

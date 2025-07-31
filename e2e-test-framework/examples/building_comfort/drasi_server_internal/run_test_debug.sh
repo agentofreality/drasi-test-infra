@@ -17,5 +17,5 @@
 GREEN="\033[32m"
 RESET="\033[0m"
 
-echo -e "${GREEN}\nRunning the E2E Test Service as a local process...${RESET}"
-RUST_LOG=info cargo run --release --manifest-path ./test-service/Cargo.toml -- --config examples/building_comfort/drasi_server/config.json
+echo -e "${GREEN}\nRunning the E2E Test Service with Internal Drasi Server (DEBUG)...${RESET}"
+RUST_LOG=debug,test_run_host::drasi_servers=trace,test_run_host::sources::source_change_dispatchers::drasi_server_channel_dispatcher=trace,test_run_host::reactions::reaction_handlers::drasi_server_channel_handler=trace cargo run --release --manifest-path ./test-service/Cargo.toml -- --config examples/building_comfort/drasi_server_internal/config.json

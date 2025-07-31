@@ -202,6 +202,11 @@ pub trait TestRunSource: Send + Sync + std::fmt::Debug {
     async fn stop_source_change_generator(
         &self,
     ) -> anyhow::Result<SourceChangeGeneratorCommandResponse>;
+
+    /// Sets the TestRunHost for dispatchers that need it (optional)
+    fn set_test_run_host(&self, _test_run_host: std::sync::Arc<crate::TestRunHost>) {
+        // Default implementation does nothing - only some sources need this
+    }
 }
 
 #[async_trait]
@@ -266,6 +271,10 @@ impl TestRunSource for Box<dyn TestRunSource + Send + Sync> {
         &self,
     ) -> anyhow::Result<SourceChangeGeneratorCommandResponse> {
         (**self).stop_source_change_generator().await
+    }
+
+    fn set_test_run_host(&self, test_run_host: std::sync::Arc<crate::TestRunHost>) {
+        (**self).set_test_run_host(test_run_host)
     }
 }
 

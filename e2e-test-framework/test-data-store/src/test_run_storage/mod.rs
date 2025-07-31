@@ -27,6 +27,8 @@ const SOURCE_CHANGE_LOG_FOLDER_NAME: &str = "source_change_log";
 const REACTIONS_FOLDER_NAME: &str = "reactions";
 const REACTION_OUTPUT_LOG_FOLDER_NAME: &str = "output_log";
 
+const DRASI_SERVERS_FOLDER_NAME: &str = "drasi_servers";
+
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
 pub struct TestRunId {
     pub test_id: String,
@@ -216,6 +218,53 @@ impl TryFrom<&str> for TestRunReactionId {
     }
 }
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
+pub struct TestRunDrasiServerId {
+    pub test_run_id: TestRunId,
+    pub test_drasi_server_id: String,
+}
+
+impl TestRunDrasiServerId {
+    pub fn new(test_run_id: &TestRunId, test_drasi_server_id: &str) -> Self {
+        Self {
+            test_run_id: test_run_id.clone(),
+            test_drasi_server_id: test_drasi_server_id.to_string(),
+        }
+    }
+}
+
+impl fmt::Display for TestRunDrasiServerId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}.{}", self.test_run_id, self.test_drasi_server_id)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ParseTestRunDrasiServerIdError {
+    #[error("Invalid format for TestRunDrasiServerId - {0}")]
+    InvalidFormat(String),
+    #[error("Invalid values for TestRunDrasiServerId - {0}")]
+    InvalidValues(String),
+}
+
+impl TryFrom<&str> for TestRunDrasiServerId {
+    type Error = ParseTestRunDrasiServerIdError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let parts: Vec<&str> = value.split('.').collect();
+        if parts.len() == 4 {
+            Ok(Self {
+                test_run_id: TestRunId::new(parts[0], parts[1], parts[2]),
+                test_drasi_server_id: parts[3].to_string(),
+            })
+        } else {
+            Err(ParseTestRunDrasiServerIdError::InvalidFormat(
+                value.to_string(),
+            ))
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct TestRunStore {
     pub path: PathBuf,
@@ -280,6 +329,7 @@ impl TestRunStore {
         let queries_path = test_run_path.join(QUERIES_FOLDER_NAME);
         let sources_path = test_run_path.join(SOURCES_FOLDER_NAME);
         let reactions_path = test_run_path.join(REACTIONS_FOLDER_NAME);
+        let drasi_servers_path = test_run_path.join(DRASI_SERVERS_FOLDER_NAME);
 
         if replace && test_run_path.exists() {
             fs::remove_dir_all(&test_run_path).await?;
@@ -295,6 +345,7 @@ impl TestRunStore {
             queries_path,
             sources_path,
             reactions_path,
+            drasi_servers_path,
         })
     }
 }
@@ -305,6 +356,7 @@ pub struct TestRunStorage {
     pub queries_path: PathBuf,
     pub sources_path: PathBuf,
     pub reactions_path: PathBuf,
+    pub drasi_servers_path: PathBuf,
 }
 
 impl TestRunStorage {
@@ -446,6 +498,54 @@ impl TestRunStorage {
         }
         Ok(test_run_reactions)
     }
+
+    pub async fn get_drasi_server_storage(
+        &self,
+        drasi_server_id: &TestRunDrasiServerId,
+        replace: bool,
+    ) -> anyhow::Result<TestRunDrasiServerStorage> {
+        log::debug!(
+            "Getting (replace = {}) TestRunDrasiServerStorage for ID: {:?}",
+            replace,
+            drasi_server_id
+        );
+
+        let drasi_server_path = self
+            .drasi_servers_path
+            .join(&drasi_server_id.test_drasi_server_id);
+
+        if replace && drasi_server_path.exists() {
+            fs::remove_dir_all(&drasi_server_path).await?;
+        }
+
+        if !drasi_server_path.exists() {
+            fs::create_dir_all(&drasi_server_path).await?;
+        }
+
+        Ok(TestRunDrasiServerStorage {
+            id: drasi_server_id.clone(),
+            path: drasi_server_path,
+        })
+    }
+
+    pub async fn get_drasi_server_ids(&self) -> anyhow::Result<Vec<TestRunDrasiServerId>> {
+        let mut test_run_drasi_servers = Vec::new();
+
+        if self.drasi_servers_path.exists() {
+            let mut entries = fs::read_dir(&self.drasi_servers_path).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                let metadata = entry.metadata().await?;
+                if metadata.is_dir() {
+                    if let Some(folder_name) = entry.file_name().to_str() {
+                        let drasi_server_id = TestRunDrasiServerId::new(&self.id, folder_name);
+                        test_run_drasi_servers.push(drasi_server_id);
+                    }
+                }
+            }
+        }
+
+        Ok(test_run_drasi_servers)
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -489,6 +589,26 @@ impl TestRunReactionStorage {
     pub async fn write_test_run_summary(&self, summary: &Value) -> anyhow::Result<()> {
         let summary_path = self.path.join("test_run_summary.json");
         fs::write(summary_path, serde_json::to_string_pretty(summary)?).await?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct TestRunDrasiServerStorage {
+    pub id: TestRunDrasiServerId,
+    pub path: PathBuf,
+}
+
+impl TestRunDrasiServerStorage {
+    pub async fn write_test_run_summary(&self, summary: &Value) -> anyhow::Result<()> {
+        let summary_path = self.path.join("test_run_summary.json");
+        fs::write(summary_path, serde_json::to_string_pretty(summary)?).await?;
+        Ok(())
+    }
+
+    pub async fn write_server_config(&self, config: &Value) -> anyhow::Result<()> {
+        let config_path = self.path.join("server_config.json");
+        fs::write(config_path, serde_json::to_string_pretty(config)?).await?;
         Ok(())
     }
 }

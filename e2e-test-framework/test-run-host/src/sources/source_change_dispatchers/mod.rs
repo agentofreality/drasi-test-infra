@@ -21,6 +21,8 @@ use test_data_store::{
 
 pub mod console_dispatcher;
 pub mod dapr_dispatcher;
+pub mod drasi_server_api_dispatcher;
+pub mod drasi_server_channel_dispatcher;
 pub mod http_dispatcher;
 pub mod jsonl_file_dispatcher;
 pub mod redis_stream_disspatcher;
@@ -47,6 +49,11 @@ pub trait SourceChangeDispatcher: Send + Sync {
         &mut self,
         events: Vec<&SourceChangeEvent>,
     ) -> anyhow::Result<()>;
+
+    /// Sets the TestRunHost for dispatchers that need it (optional)
+    fn set_test_run_host(&mut self, _test_run_host: std::sync::Arc<crate::TestRunHost>) {
+        // Default implementation does nothing - only some dispatchers need this
+    }
 }
 
 #[async_trait]
@@ -59,6 +66,9 @@ impl SourceChangeDispatcher for Box<dyn SourceChangeDispatcher + Send + Sync> {
         events: Vec<&SourceChangeEvent>,
     ) -> anyhow::Result<()> {
         (**self).dispatch_source_change_events(events).await
+    }
+    fn set_test_run_host(&mut self, test_run_host: std::sync::Arc<crate::TestRunHost>) {
+        (**self).set_test_run_host(test_run_host)
     }
 }
 
@@ -87,6 +97,20 @@ pub async fn create_source_change_dispatcher(
         SourceChangeDispatcherDefinition::RedisStream(def) => Ok(Box::new(
             redis_stream_disspatcher::RedisStreamSourceChangeDispatcher::new(def, output_storage)
                 .await?,
+        )
+            as Box<dyn SourceChangeDispatcher + Send + Sync>),
+        SourceChangeDispatcherDefinition::DrasiServerApi(def) => Ok(Box::new(
+            drasi_server_api_dispatcher::DrasiServerApiSourceChangeDispatcher::new(
+                def,
+                output_storage,
+            )?,
+        )
+            as Box<dyn SourceChangeDispatcher + Send + Sync>),
+        SourceChangeDispatcherDefinition::DrasiServerChannel(def) => Ok(Box::new(
+            drasi_server_channel_dispatcher::DrasiServerChannelSourceChangeDispatcher::new(
+                def,
+                output_storage,
+            )?,
         )
             as Box<dyn SourceChangeDispatcher + Send + Sync>),
     }

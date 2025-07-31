@@ -132,6 +132,11 @@ pub trait SourceChangeGenerator: Send + Sync + std::fmt::Debug {
         spacing_mode: Option<SpacingMode>,
     ) -> anyhow::Result<SourceChangeGeneratorCommandResponse>;
     async fn stop(&self) -> anyhow::Result<SourceChangeGeneratorCommandResponse>;
+
+    /// Sets the TestRunHost for dispatchers that need it (optional)
+    fn set_test_run_host_on_dispatchers(&self, _test_run_host: std::sync::Arc<crate::TestRunHost>) {
+        // Default implementation does nothing - only some generators need this
+    }
 }
 
 #[async_trait]
@@ -170,6 +175,10 @@ impl SourceChangeGenerator for Box<dyn SourceChangeGenerator + Send + Sync> {
 
     async fn stop(&self) -> anyhow::Result<SourceChangeGeneratorCommandResponse> {
         (**self).stop().await
+    }
+
+    fn set_test_run_host_on_dispatchers(&self, test_run_host: std::sync::Arc<crate::TestRunHost>) {
+        (**self).set_test_run_host_on_dispatchers(test_run_host)
     }
 }
 

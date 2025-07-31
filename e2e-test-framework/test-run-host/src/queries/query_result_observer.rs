@@ -29,8 +29,8 @@ use tokio::sync::mpsc::Receiver;
 
 use crate::queries::{
     query_output_handler::{
-        QueryControlSignal, QueryHandlerMessage, QueryHandlerRecord,
-        QueryHandlerStatus, QueryOutputHandler,
+        QueryControlSignal, QueryHandlerMessage, QueryHandlerRecord, QueryHandlerStatus,
+        QueryOutputHandler,
     },
     result_stream_record::{ControlEvent, ControlSignal, QueryResultRecord},
     stop_triggers::{create_stop_trigger, StopTrigger},
@@ -112,14 +112,14 @@ impl QueryResultObserverSettings {
     ) -> anyhow::Result<Self> {
         // Start with stop trigger from test definition
         let mut stop_trigger = definition.stop_trigger.clone();
-        
+
         // Allow overrides to replace it
         if let Some(overrides) = test_run_overrides {
             if let Some(override_stop_trigger) = &overrides.stop_trigger {
                 stop_trigger = Some(override_stop_trigger.clone());
             }
         }
-        
+
         let settings = Self {
             stop_trigger,
             definition,

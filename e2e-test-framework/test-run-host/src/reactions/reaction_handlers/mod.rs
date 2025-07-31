@@ -23,6 +23,8 @@ use test_data_store::{
 
 use crate::common::OutputHandlerMessage;
 
+pub mod drasi_server_callback_handler;
+pub mod drasi_server_channel_handler;
 pub mod http_reaction_handler;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -86,6 +88,12 @@ pub async fn create_reaction_handler(
         }
         ReactionHandlerDefinition::EventGrid(_) => {
             unimplemented!("EventGridReactionHandler is not implemented yet")
+        }
+        ReactionHandlerDefinition::DrasiServerCallback(definition) => {
+            drasi_server_callback_handler::DrasiServerCallbackHandler::new(id, definition).await
+        }
+        ReactionHandlerDefinition::DrasiServerChannel(definition) => {
+            drasi_server_channel_handler::DrasiServerChannelHandler::new(id, definition).await
         }
     }
 }

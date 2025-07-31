@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use chrono::{DateTime, Utc};
-use std::{num::NonZeroU32, str::FromStr};
+use std::{collections::HashMap, num::NonZeroU32, str::FromStr};
 
 use serde::{
     de::{self, Deserializer},
@@ -165,6 +165,8 @@ pub struct LocalTestDefinition {
     pub description: Option<String>,
     pub test_folder: Option<String>,
     #[serde(default)]
+    pub drasi_servers: Vec<TestDrasiServerDefinition>,
+    #[serde(default)]
     pub queries: Vec<TestQueryDefinition>,
     #[serde(default)]
     pub reactions: Vec<TestReactionDefinition>,
@@ -180,6 +182,8 @@ pub struct TestDefinition {
     pub version: u32,
     pub description: Option<String>,
     pub test_folder: Option<String>,
+    #[serde(default)]
+    pub drasi_servers: Vec<TestDrasiServerDefinition>,
     #[serde(default)]
     pub queries: Vec<TestQueryDefinition>,
     #[serde(default)]
@@ -298,6 +302,8 @@ pub struct BuildingHierarchyDataGeneratorDefinition {
     pub floor_count: Option<(u32, f64)>,
     pub room_count: Option<(u32, f64)>,
     pub room_sensors: Vec<SensorDefinition>,
+    #[serde(default)]
+    pub send_initial_inserts: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -358,6 +364,8 @@ pub enum SourceChangeDispatcherDefinition {
     Http(HttpSourceChangeDispatcherDefinition),
     JsonlFile(JsonlFileSourceChangeDispatcherDefinition),
     RedisStream(RedisStreamSourceChangeDispatcherDefinition),
+    DrasiServerApi(DrasiServerApiSourceChangeDispatcherDefinition),
+    DrasiServerChannel(DrasiServerChannelSourceChangeDispatcherDefinition),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -392,6 +400,21 @@ pub struct HttpSourceChangeDispatcherDefinition {
     pub endpoint: Option<String>,
     pub timeout_seconds: Option<u64>,
     pub batch_events: Option<bool>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DrasiServerApiSourceChangeDispatcherDefinition {
+    pub drasi_server_id: String,
+    pub source_id: String,
+    pub timeout_seconds: Option<u64>,
+    pub batch_events: Option<bool>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DrasiServerChannelSourceChangeDispatcherDefinition {
+    pub drasi_server_id: String,
+    pub source_id: String,
+    pub buffer_size: Option<usize>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -457,6 +480,8 @@ pub struct RecordCountStopTriggerDefinition {
 pub enum ReactionHandlerDefinition {
     Http(HttpReactionHandlerDefinition),
     EventGrid(EventGridReactionHandlerDefinition),
+    DrasiServerCallback(DrasiServerCallbackReactionHandlerDefinition),
+    DrasiServerChannel(DrasiServerChannelReactionHandlerDefinition),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -471,6 +496,20 @@ pub struct HttpReactionHandlerDefinition {
 pub struct EventGridReactionHandlerDefinition {
     pub endpoint: Option<String>,
     pub access_key: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DrasiServerCallbackReactionHandlerDefinition {
+    pub drasi_server_id: String,
+    pub reaction_id: String,
+    pub callback_type: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DrasiServerChannelReactionHandlerDefinition {
+    pub drasi_server_id: String,
+    pub reaction_id: String,
+    pub buffer_size: Option<usize>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -524,6 +563,285 @@ impl TryFrom<&str> for QueryId {
             })
         } else {
             Err(ParseQueryIdError::InvalidFormat(value.to_string()))
+        }
+    }
+}
+
+/// Test definition for a Drasi Server stored in test repositories
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TestDrasiServerDefinition {
+    /// Unique identifier for the server
+    pub id: String,
+
+    /// Human-readable name for the server
+    pub name: String,
+
+    /// Description of the server's purpose in the test
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+
+    /// Server configuration
+    pub config: DrasiServerConfig,
+}
+
+/// Runtime configuration for a Drasi Server instance
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DrasiServerConfig {
+    /// HTTP binding configuration
+    pub binding: DrasiServerBinding,
+
+    /// Runtime configuration (thread pool size, etc.)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub runtime: Option<DrasiServerRuntimeConfig>,
+
+    /// Storage backend configuration
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub storage: Option<DrasiServerStorageConfig>,
+
+    /// Authentication settings
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth: Option<DrasiServerAuthConfig>,
+
+    /// Source configurations
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sources: Vec<DrasiSourceConfig>,
+
+    /// Query configurations
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub queries: Vec<DrasiQueryConfig>,
+
+    /// Reaction configurations
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reactions: Vec<DrasiReactionConfig>,
+
+    /// Log level for the server (trace, debug, info, warn, error)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub log_level: Option<String>,
+
+    /// Additional server-specific configuration
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
+/// HTTP binding configuration for Drasi Server
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DrasiServerBinding {
+    /// Host address to bind to (e.g., "0.0.0.0", "127.0.0.1")
+    #[serde(default = "default_host")]
+    pub host: String,
+
+    /// Port to bind to (0 for automatic assignment)
+    #[serde(default = "default_port")]
+    pub port: u16,
+
+    /// Enable TLS
+    #[serde(default)]
+    pub tls: bool,
+
+    /// TLS certificate path
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cert_path: Option<String>,
+
+    /// TLS key path
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_path: Option<String>,
+}
+
+fn default_host() -> String {
+    "127.0.0.1".to_string()
+}
+
+fn default_port() -> u16 {
+    0 // Let the OS assign a port
+}
+
+/// Runtime configuration for Drasi Server
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DrasiServerRuntimeConfig {
+    /// Number of worker threads
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub worker_threads: Option<usize>,
+
+    /// Maximum number of blocking threads
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_blocking_threads: Option<usize>,
+
+    /// Thread name prefix
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thread_name_prefix: Option<String>,
+
+    /// Enable runtime metrics
+    #[serde(default)]
+    pub enable_metrics: bool,
+}
+
+/// Storage backend configuration for Drasi Server
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum DrasiServerStorageConfig {
+    /// In-memory storage (default for tests)
+    #[serde(rename = "memory")]
+    Memory {
+        /// Maximum memory usage in bytes
+        #[serde(skip_serializing_if = "Option::is_none")]
+        max_size: Option<usize>,
+    },
+
+    /// File-based storage
+    #[serde(rename = "file")]
+    File {
+        /// Base directory for storage
+        path: String,
+
+        /// Enable persistence across restarts
+        #[serde(default = "default_true")]
+        persist: bool,
+    },
+
+    /// Redis storage
+    #[serde(rename = "redis")]
+    Redis {
+        /// Redis connection URL
+        url: String,
+
+        /// Key prefix for this server instance
+        #[serde(skip_serializing_if = "Option::is_none")]
+        key_prefix: Option<String>,
+    },
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// Authentication configuration for Drasi Server
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum DrasiServerAuthConfig {
+    /// No authentication (default for tests)
+    #[serde(rename = "none")]
+    None,
+
+    /// Basic authentication
+    #[serde(rename = "basic")]
+    Basic {
+        /// Username
+        username: String,
+
+        /// Password
+        password: String,
+    },
+
+    /// Token-based authentication
+    #[serde(rename = "token")]
+    Token {
+        /// Static token value
+        token: String,
+    },
+
+    /// OAuth2 authentication
+    #[serde(rename = "oauth2")]
+    OAuth2 {
+        /// OAuth2 provider URL
+        provider_url: String,
+
+        /// Client ID
+        client_id: String,
+
+        /// Client secret
+        #[serde(skip_serializing_if = "Option::is_none")]
+        client_secret: Option<String>,
+
+        /// Required scopes
+        #[serde(default)]
+        scopes: Vec<String>,
+    },
+}
+
+/// Source configuration for Drasi Server
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DrasiSourceConfig {
+    /// Unique name for the source
+    pub name: String,
+
+    /// Type of source (e.g., "mock", "kafka", "database")
+    pub source_type: String,
+
+    /// Whether to automatically start this source
+    #[serde(default = "default_true")]
+    pub auto_start: bool,
+
+    /// Source-specific configuration properties
+    #[serde(default)]
+    pub properties: HashMap<String, serde_json::Value>,
+}
+
+/// Query configuration for Drasi Server
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DrasiQueryConfig {
+    /// Unique name for the query
+    pub name: String,
+
+    /// Cypher query string
+    pub query: String,
+
+    /// Names of sources this query subscribes to
+    pub sources: Vec<String>,
+
+    /// Whether to automatically start this query
+    #[serde(default = "default_true")]
+    pub auto_start: bool,
+
+    /// Query-specific configuration properties
+    #[serde(default)]
+    pub properties: HashMap<String, serde_json::Value>,
+}
+
+/// Reaction configuration for Drasi Server
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DrasiReactionConfig {
+    /// Unique name for the reaction
+    pub name: String,
+
+    /// Type of reaction (e.g., "log", "webhook", "notification")
+    pub reaction_type: String,
+
+    /// Names of queries this reaction subscribes to
+    pub queries: Vec<String>,
+
+    /// Whether to automatically start this reaction
+    #[serde(default = "default_true")]
+    pub auto_start: bool,
+
+    /// Reaction-specific configuration properties
+    #[serde(default)]
+    pub properties: HashMap<String, serde_json::Value>,
+}
+
+impl Default for DrasiServerBinding {
+    fn default() -> Self {
+        Self {
+            host: default_host(),
+            port: default_port(),
+            tls: false,
+            cert_path: None,
+            key_path: None,
+        }
+    }
+}
+
+impl Default for DrasiServerConfig {
+    fn default() -> Self {
+        Self {
+            binding: DrasiServerBinding::default(),
+            runtime: None,
+            storage: None,
+            auth: None,
+            sources: Vec::new(),
+            queries: Vec::new(),
+            reactions: Vec::new(),
+            log_level: None,
+            extra: HashMap::new(),
         }
     }
 }

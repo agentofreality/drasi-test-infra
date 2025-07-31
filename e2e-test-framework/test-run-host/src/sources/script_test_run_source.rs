@@ -144,9 +144,10 @@ impl ScriptTestRunSource {
             subscribers: definition.subscribers,
         };
 
-        if trs.start_mode == SourceStartMode::Auto {
-            trs.start_source_change_generator().await?;
-        }
+        // Don't auto-start here - TestRunHost will handle it after setting references
+        // if trs.start_mode == SourceStartMode::Auto {
+        //     trs.start_source_change_generator().await?;
+        // }
 
         Ok(trs)
     }
@@ -310,6 +311,13 @@ impl TestRunSource for ScriptTestRunSource {
                     &self.id
                 );
             }
+        }
+    }
+
+    fn set_test_run_host(&self, test_run_host: std::sync::Arc<crate::TestRunHost>) {
+        // Pass TestRunHost to the source change generator
+        if let Some(generator) = &self.source_change_generator {
+            generator.set_test_run_host_on_dispatchers(test_run_host);
         }
     }
 }

@@ -94,7 +94,8 @@ pub struct TestRunReactionDefinition {
     pub id: TestRunReactionId,
     pub start_immediately: bool,
     pub reaction_handler_definition: ReactionHandlerDefinition,
-    pub test_reaction_definition: test_data_store::test_repo_storage::models::TestReactionDefinition,
+    pub test_reaction_definition:
+        test_data_store::test_repo_storage::models::TestReactionDefinition,
     pub test_run_overrides: Option<TestRunReactionOverrides>,
     pub output_loggers: Vec<OutputLoggerConfig>,
 }
@@ -144,7 +145,11 @@ impl TestRunReaction {
         let output_loggers = definition.output_loggers.clone();
 
         // Get stop triggers from test definition, allow overrides
-        let mut stop_triggers = definition.test_reaction_definition.stop_triggers.clone().unwrap_or_default();
+        let mut stop_triggers = definition
+            .test_reaction_definition
+            .stop_triggers
+            .clone()
+            .unwrap_or_default();
         if let Some(overrides) = &definition.test_run_overrides {
             if let Some(override_stop_triggers) = &overrides.stop_triggers {
                 stop_triggers = override_stop_triggers.clone();
@@ -167,9 +172,10 @@ impl TestRunReaction {
             start_immediately: definition.start_immediately,
         };
 
-        if reaction.start_immediately {
-            reaction.start_reaction_observer().await?;
-        }
+        // Don't auto-start here - TestRunHost will handle it after setting references
+        // if reaction.start_immediately {
+        //     reaction.start_reaction_observer().await?;
+        // }
 
         Ok(reaction)
     }
@@ -211,8 +217,12 @@ impl TestRunReaction {
     ) -> anyhow::Result<reaction_observer::ReactionObserverCommandResponse> {
         self.reaction_observer.stop().await
     }
-}
 
+    /// Sets the TestRunHost for handlers that need it (e.g., DrasiServerChannelHandler)
+    pub fn set_test_run_host(&self, test_run_host: std::sync::Arc<crate::TestRunHost>) {
+        self.reaction_observer.set_test_run_host(test_run_host);
+    }
+}
 
 #[cfg(test)]
 mod tests;

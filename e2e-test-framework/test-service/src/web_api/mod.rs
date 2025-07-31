@@ -27,6 +27,10 @@ use tokio::{select, signal};
 use utoipa::{OpenApi, ToSchema};
 
 use data_collector::DataCollector;
+use drasi_server_queries::get_drasi_server_queries_routes;
+use drasi_server_reactions::get_drasi_server_reactions_routes;
+use drasi_server_sources::get_drasi_server_sources_routes;
+use drasi_servers::get_drasi_servers_routes;
 use queries::get_queries_routes;
 use reactions::get_reactions_routes;
 use repo::get_test_repo_routes;
@@ -37,6 +41,10 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::openapi::ApiDoc;
 
+pub mod drasi_server_queries;
+pub mod drasi_server_reactions;
+pub mod drasi_server_sources;
+pub mod drasi_servers;
 pub mod queries;
 pub mod reactions;
 pub mod repo;
@@ -183,6 +191,10 @@ pub(crate) async fn start_web_api(
     let api_router = Router::new()
         .route("/", get(get_service_info_handler))
         .nest("/test_repos", get_test_repo_routes())
+        .nest("/test_run_host", get_drasi_servers_routes())
+        .nest("/test_run_host", get_drasi_server_sources_routes())
+        .nest("/test_run_host", get_drasi_server_queries_routes())
+        .nest("/test_run_host", get_drasi_server_reactions_routes())
         .nest("/test_run_host", get_queries_routes())
         .nest("/test_run_host", get_reactions_routes())
         .nest("/test_run_host", get_sources_routes());

@@ -28,8 +28,9 @@ use test_repo_storage::{
     TestRepoStorage, TestRepoStore, TestSourceScriptSet, TestSourceStorage, TestStorage,
 };
 use test_run_storage::{
-    TestRunId, TestRunQueryId, TestRunQueryStorage, TestRunReactionId, TestRunReactionStorage,
-    TestRunSourceId, TestRunSourceStorage, TestRunStorage, TestRunStore,
+    TestRunDrasiServerId, TestRunDrasiServerStorage, TestRunId, TestRunQueryId,
+    TestRunQueryStorage, TestRunReactionId, TestRunReactionStorage, TestRunSourceId,
+    TestRunSourceStorage, TestRunStorage, TestRunStore,
 };
 
 pub mod data_collection_storage;
@@ -412,6 +413,19 @@ impl TestDataStore {
             .get_test_run_storage(&test_run_reaction_id.test_run_id, false)
             .await?
             .get_reaction_storage(test_run_reaction_id, false)
+            .await
+    }
+
+    pub async fn get_test_run_drasi_server_storage(
+        &self,
+        test_run_drasi_server_id: &TestRunDrasiServerId,
+    ) -> anyhow::Result<TestRunDrasiServerStorage> {
+        self.test_run_store
+            .lock()
+            .await
+            .get_test_run_storage(&test_run_drasi_server_id.test_run_id, false)
+            .await?
+            .get_drasi_server_storage(test_run_drasi_server_id, false)
             .await
     }
 

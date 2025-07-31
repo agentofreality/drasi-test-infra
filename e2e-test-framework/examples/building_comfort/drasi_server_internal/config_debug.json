@@ -1,0 +1,130 @@
+{
+  "data_store": {
+      "data_store_path": "examples/building_comfort/drasi_server_internal/test_data_cache",
+      "delete_on_start": true,
+      "delete_on_stop": true,
+      "test_repos": [
+          {
+              "id": "drasi_server_dev_repo",
+              "kind": "LocalStorage",
+              "source_path": "examples/building_comfort/drasi_server_internal/dev_repo",
+              "local_tests": [
+                {
+                    "test_id": "building_comfort",
+                    "version": 1,
+                    "description": "Building comfort monitoring test with internal Drasi Server",
+                    "test_folder": "building_comfort",
+                    "drasi_servers": [
+                        {
+                        "id": "internal-drasi-server",
+                        "name": "Internal Drasi Server for Building Comfort",
+                        "description": "Embedded Drasi Server instance for testing",
+                        "config": {
+                            "binding": {
+                            "host": "127.0.0.1",
+                            "port": 0
+                            },
+                            "runtime": {
+                            "workers": 4,
+                            "queue_size": 1000
+                            },
+                            "storage": {
+                            "type": "memory"
+                            },
+                            "log_level": "debug",
+                            "sources": [
+                            {
+                                "name": "facilities-db",
+                                "source_type": "internal.application",
+                                "auto_start": true,
+                                "properties": {}
+                            }
+                            ],
+                            "queries": [
+                            {
+                                "name": "all-rooms",
+                                "query": "MATCH (r:Room) RETURN elementId(r) AS RoomId, 50 + (r.temperature - 72) + (r.humidity - 42) + (r.co2 / 25) AS ComfortLevel",
+                                "sources": ["facilities-db"],
+                                "auto_start": true,
+                                "properties": {}
+                            }
+                            ],
+                            "reactions": [
+                            {
+                                "name": "building-comfort-alerts",
+                                "reaction_type": "internal.application",
+                                "queries": ["all-rooms"],
+                                "auto_start": true,
+                                "properties": {}
+                            }
+                            ]
+                        }
+                        }
+                    ],
+                    "queries": [],
+                    "sources": [
+                        {
+                        "test_source_id": "facilities-db",
+                        "kind": "Model",
+                        "source_change_dispatchers": [ 
+                            {
+                            "kind": "Console"
+                            }
+                        ],
+                        "model_data_generator": {
+                            "kind": "BuildingHierarchy",
+                            "change_interval": [1000000000, 100000000, 100000000, 1000000000],
+                            "change_count": 3,
+                            "send_initial_inserts": true,
+                            "seed": 123456789,
+                            "spacing_mode": "none",
+                            "time_mode": "2025-01-03T10:03:15.4Z",
+                            "building_count": [1, 0],
+                            "floor_count": [1, 0],
+                            "room_count": [1, 0],                   
+                            "room_sensors": [
+                            {
+                                "kind": "NormalFloat",
+                                "id": "temperature",
+                                "momentum_init": [5, 1, 0.5],
+                                "value_change": [1, 0.5],
+                                "value_init": [72, 5],
+                                "value_range": [20, 110]
+                            }
+                            ]
+                        },
+                        "subscribers": []
+                        }
+                    ],
+                    "reactions": []
+                    }
+              ]
+          }                    
+      ]
+  },
+  "test_run_host": {
+      "drasi_servers": [
+          {
+              "test_id": "building_comfort",
+              "test_repo_id": "drasi_server_dev_repo",
+              "test_run_id": "test_run_002",
+              "test_drasi_server_id": "internal-drasi-server",
+              "start_immediately": true
+          }
+      ],
+      "queries": [],
+      "reactions": [],
+      "sources": [
+          {
+              "test_id": "building_comfort",
+              "test_repo_id": "drasi_server_dev_repo",                
+              "test_run_id": "test_run_002",
+              "test_source_id": "facilities-db",
+              "start_mode": "auto",
+              "test_run_overrides" : {
+                "model_data_generator": {}              
+              }
+          }
+      ]
+  }
+}

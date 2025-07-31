@@ -18,8 +18,9 @@ use serde_json::json;
 use utoipa::{OpenApi, ToSchema};
 
 use crate::web_api::{
-    queries, reactions, repo, sources, DataCollectorStateResponse, TestDataStoreStateResponse,
-    TestRunHostStateResponse, TestServiceStateResponse,
+    drasi_server_queries, drasi_server_reactions, drasi_server_sources,
+    drasi_servers, queries, reactions, repo, sources, DataCollectorStateResponse,
+    TestDataStoreStateResponse, TestRunHostStateResponse, TestServiceStateResponse,
 };
 
 /// Standard error response for all API endpoints
@@ -163,6 +164,37 @@ pub struct SourceBootstrapResponseBody {
 #[openapi(
     paths(
         crate::web_api::get_service_info_handler,
+        // Drasi Server endpoints
+        drasi_servers::create_drasi_server,
+        drasi_servers::list_drasi_servers,
+        drasi_servers::get_drasi_server,
+        drasi_servers::delete_drasi_server,
+        drasi_servers::get_drasi_server_status,
+        // Drasi Server Sources endpoints
+        drasi_server_sources::list_sources,
+        drasi_server_sources::get_source,
+        drasi_server_sources::create_source,
+        drasi_server_sources::update_source,
+        drasi_server_sources::delete_source,
+        drasi_server_sources::start_source,
+        drasi_server_sources::stop_source,
+        // Drasi Server Queries endpoints
+        drasi_server_queries::list_queries,
+        drasi_server_queries::get_query,
+        drasi_server_queries::create_query,
+        drasi_server_queries::update_query,
+        drasi_server_queries::delete_query,
+        drasi_server_queries::start_query,
+        drasi_server_queries::stop_query,
+        drasi_server_queries::get_query_results,
+        // Drasi Server Reactions endpoints
+        drasi_server_reactions::list_reactions,
+        drasi_server_reactions::get_reaction,
+        drasi_server_reactions::create_reaction,
+        drasi_server_reactions::update_reaction,
+        drasi_server_reactions::delete_reaction,
+        drasi_server_reactions::start_reaction,
+        drasi_server_reactions::stop_reaction,
         // Source endpoints
         sources::get_source_list_handler,
         sources::get_source_handler,
@@ -232,10 +264,43 @@ pub struct SourceBootstrapResponseBody {
             repo::TestResponse,
             repo::TestSourcePostBody,
             repo::TestSourceResponse,
+            // Drasi Server schemas
+            drasi_servers::DrasiServerCreatedResponse,
+            drasi_servers::DrasiServerInfo,
+            drasi_servers::DrasiServerDetails,
+            drasi_servers::DrasiServerStatus,
+            test_run_host::drasi_servers::TestRunDrasiServerConfig,
+            test_run_host::drasi_servers::TestRunDrasiServerState,
+            // Drasi Server Component schemas
+            test_run_host::api_models::ComponentStatus,
+            test_run_host::api_models::StatusResponse,
+            test_run_host::api_models::DrasiServerError,
+            // Drasi Server Source schemas
+            test_run_host::api_models::SourceInfo,
+            test_run_host::api_models::SourceDetails,
+            test_run_host::api_models::CreateSourceRequest,
+            test_run_host::api_models::UpdateSourceRequest,
+            test_run_host::api_models::SourceCreatedResponse,
+            // Drasi Server Query schemas
+            test_run_host::api_models::QueryInfo,
+            test_run_host::api_models::QueryDetails,
+            test_run_host::api_models::CreateQueryRequest,
+            test_run_host::api_models::UpdateQueryRequest,
+            test_run_host::api_models::QueryCreatedResponse,
+            // Drasi Server Reaction schemas
+            test_run_host::api_models::ReactionInfo,
+            test_run_host::api_models::ReactionDetails,
+            test_run_host::api_models::CreateReactionRequest,
+            test_run_host::api_models::UpdateReactionRequest,
+            test_run_host::api_models::ReactionCreatedResponse,
         )
     ),
     tags(
         (name = "service", description = "Test Service general information"),
+        (name = "drasi-servers", description = "Drasi Server management API"),
+        (name = "drasi-server-sources", description = "Drasi Server Sources management API"),
+        (name = "drasi-server-queries", description = "Drasi Server Queries management API"),
+        (name = "drasi-server-reactions", description = "Drasi Server Reactions management API"),
         (name = "sources", description = "Test source management API"),
         (name = "queries", description = "Test query management API"),
         (name = "reactions", description = "Test reaction management API"),
