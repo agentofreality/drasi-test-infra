@@ -280,6 +280,13 @@ impl ReactionObserver {
         stop_triggers: Vec<StopTriggerDefinition>,
         test_run_overrides: Option<TestRunReactionOverrides>,
     ) -> anyhow::Result<Self> {
+        log::info!(
+            "ReactionObserver::new() for {} with {} loggers: {:?}",
+            id,
+            loggers.len(),
+            loggers
+        );
+        
         let settings = Arc::new(
             ReactionObserverSettings::new(
                 id.clone(),
@@ -525,10 +532,18 @@ impl ReactionObserver {
                 }
 
                 // Close loggers and collect results
+                log::info!("Closing {} loggers in stop() method", internal_state.loggers.len());
                 let mut results = Vec::new();
-                for logger in &mut internal_state.loggers {
-                    if let Ok(result) = logger.end_test_run().await {
-                        results.push(result);
+                for (idx, logger) in internal_state.loggers.iter_mut().enumerate() {
+                    log::debug!("Calling end_test_run on logger {} in stop()", idx);
+                    match logger.end_test_run().await {
+                        Ok(result) => {
+                            log::info!("Logger {} completed in stop(): {:?}", idx, result);
+                            results.push(result);
+                        }
+                        Err(e) => {
+                            log::error!("Logger {} failed to end test run in stop(): {}", idx, e);
+                        }
                     }
                 }
                 internal_state.logger_results.extend(results);
@@ -610,16 +625,35 @@ async fn observe_reaction_handler(
 
                         // Check stop triggers
                         let handler_status = output_handler.status().await;
-                        for trigger in &state.stop_triggers {
-                            if let Ok(true) = trigger.is_true(&handler_status, &state.metrics).await {
-                                log::info!("Stop trigger fired, stopping reaction observer");
-                                state.status = ReactionObserverStatus::Stopped;
+                        log::trace!(
+                            "Checking {} stop triggers after {} invocations",
+                            state.stop_triggers.len(),
+                            state.metrics.reaction_invocation_count
+                        );
+                        
+                        for (idx, trigger) in state.stop_triggers.iter().enumerate() {
+                            match trigger.is_true(&handler_status, &state.metrics).await {
+                                Ok(true) => {
+                                    log::error!(
+                                        "Stop trigger {} fired after {} invocations, stopping reaction observer",
+                                        idx,
+                                        state.metrics.reaction_invocation_count
+                                    );
+                                    state.status = ReactionObserverStatus::Stopped;
 
                                 // Close loggers and collect results before stopping
+                                log::info!("Closing {} loggers after stop trigger fired", state.loggers.len());
                                 let mut results = Vec::new();
-                                for logger in &mut state.loggers {
-                                    if let Ok(result) = logger.end_test_run().await {
-                                        results.push(result);
+                                for (idx, logger) in state.loggers.iter_mut().enumerate() {
+                                    log::debug!("Calling end_test_run on logger {}", idx);
+                                    match logger.end_test_run().await {
+                                        Ok(result) => {
+                                            log::info!("Logger {} completed: {:?}", idx, result);
+                                            results.push(result);
+                                        }
+                                        Err(e) => {
+                                            log::error!("Logger {} failed to end test run: {}", idx, e);
+                                        }
                                     }
                                 }
                                 state.logger_results.extend(results);
@@ -633,6 +667,13 @@ async fn observe_reaction_handler(
 
                                 output_handler.stop().await.ok();
                                 return;
+                                }
+                                Ok(false) => {
+                                    log::trace!("Stop trigger {} not fired yet", idx);
+                                }
+                                Err(e) => {
+                                    log::error!("Error checking stop trigger {}: {}", idx, e);
+                                }
                             }
                         }
                     }
@@ -747,9 +788,16 @@ async fn handle_reaction_invocation(
     };
 
     // Log to all configured loggers
-    for logger in &mut state.loggers {
+    log::debug!(
+        "Logging handler record (seq: {}) to {} loggers",
+        handler_record.sequence,
+        state.loggers.len()
+    );
+    
+    for (idx, logger) in state.loggers.iter_mut().enumerate() {
+        log::trace!("Sending record to logger {}", idx);
         if let Err(e) = logger.log_handler_record(&handler_record).await {
-            log::error!("Failed to log reaction invocation: {}", e);
+            log::error!("Failed to log reaction invocation to logger {}: {}", idx, e);
         }
     }
 }
@@ -762,10 +810,20 @@ async fn create_reaction_loggers(
 ) -> anyhow::Result<Vec<Box<dyn OutputLogger + Send + Sync>>> {
     use crate::reactions::output_loggers::create_output_logger;
 
+    log::info!(
+        "create_reaction_loggers() for {} with {} configs, storage path: {:?}",
+        reaction_id,
+        configs.len(),
+        output_storage.reaction_output_path
+    );
+
     let mut result = Vec::new();
     for config in configs {
+        log::info!("Creating logger with config: {:?}", config);
         result.push(create_output_logger(reaction_id.clone(), config, output_storage).await?);
     }
+    
+    log::info!("Successfully created {} loggers", result.len());
     Ok(result)
 }
 

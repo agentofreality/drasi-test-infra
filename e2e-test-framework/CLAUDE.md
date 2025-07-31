@@ -168,3 +168,37 @@ RUST_LOG='info,drasi_core::query::continuous_query=error,drasi_core::path_solver
 - Use `error` level instead of `off` for drasi_core modules (due to tracing/log interop)
 - The test-service uses `env_logger` which bridges tracing events to log events
 - Apply this pattern to both regular and debug test scripts
+
+## Reaction Output Loggers (2025-07-31)
+
+**Performance Metrics Logger**: A new output logger that tracks timing and throughput metrics for reactions:
+
+```json
+{
+  "output_loggers": [
+    {
+      "kind": "PerformanceMetrics",
+      "filename": "custom_metrics.json"  // optional, defaults to performance_metrics_TIMESTAMP.json
+    }
+  ]
+}
+```
+
+The logger captures:
+- First record timestamp (nanoseconds)
+- Last record timestamp when stop trigger fires
+- Total record count
+- Records per second throughput
+
+Output format:
+```json
+{
+  "start_time_ns": 1627849200000000000,
+  "end_time_ns": 1627849260000000000,
+  "duration_ns": 60000000000,
+  "record_count": 150000,
+  "records_per_second": 2500.0,
+  "test_run_reaction_id": "test_repo.test_id.run_001.reaction_001",
+  "timestamp": "2025-07-31T19:45:00Z"
+}
+```

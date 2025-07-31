@@ -77,14 +77,14 @@
                         "model_data_generator": {
                             "kind": "BuildingHierarchy",
                             "change_interval": [5000000000, 1000000000, 1000000000, 5000000000],
-                            "change_count": 100000,
+                            "change_count": 500000,
                             "send_initial_inserts": true,
                             "seed": 123456789,
                             "spacing_mode": "none",
                             "time_mode": "2025-01-03T10:03:15.4Z",
-                            "building_count": [1, 0],
-                            "floor_count": [1, 0],
-                            "room_count": [1, 0],                   
+                            "building_count": [10, 0],
+                            "floor_count": [10, 0],
+                            "room_count": [10, 0],                   
                             "room_sensors": [
                             {
                                 "kind": "NormalFloat",
@@ -127,7 +127,7 @@
                         "stop_triggers": [
                             {
                             "kind": "RecordCount",
-                            "record_count": 90000
+                            "record_count": 450000
                             }
                         ]
                         }
@@ -157,8 +157,7 @@
               "start_immediately": true,
               "output_loggers": [
                   {
-                      "kind": "JsonlFile",
-                      "max_lines_per_file": 15000
+                      "kind": "PerformanceMetrics"
                   }
               ]
           }

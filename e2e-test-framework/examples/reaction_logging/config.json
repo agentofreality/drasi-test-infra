@@ -36,11 +36,15 @@
       "start_immediately": true,
       "loggers": [
         {
-          "type": "jsonl_file",
-          "output_folder": "reaction_invocations"
+          "kind": "JsonlFile",
+          "max_lines_per_file": 1000
         },
         {
-          "type": "console"
+          "kind": "Console"
+        },
+        {
+          "kind": "PerformanceMetrics",
+          "filename": "reaction_performance.json"
         }
       ]
     }

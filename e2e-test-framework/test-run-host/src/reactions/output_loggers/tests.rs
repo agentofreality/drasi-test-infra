@@ -149,4 +149,58 @@ mod tests {
         assert!(loggers.is_ok());
         assert_eq!(loggers.unwrap().len(), 2);
     }
+
+    #[tokio::test]
+    async fn test_performance_metrics_logger() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_run_id = TestRunId::new("test_repo", "test_id", "test_run_001");
+        let reaction_id = TestRunReactionId::new(&test_run_id, "reaction_001");
+        
+        let reaction_storage = TestRunReactionStorage {
+            id: reaction_id.clone(),
+            path: temp_dir.path().to_path_buf(),
+            reaction_output_path: temp_dir.path().join("outputs"),
+        };
+
+        let config = OutputLoggerConfig::PerformanceMetrics(PerformanceMetricsOutputLoggerConfig {
+            filename: Some("test_performance.json".to_string()),
+        });
+
+        let mut logger = create_output_logger(reaction_id, &config, &reaction_storage)
+            .await
+            .unwrap();
+
+        // Create test records
+        for i in 0..50 {
+            let record = HandlerRecord {
+                id: format!("test_{}", i),
+                sequence: i as u64,
+                created_time_ns: 1000 + i,
+                processed_time_ns: 2000 + i,
+                traceparent: None,
+                tracestate: None,
+                payload: HandlerPayload::ReactionOutput {
+                    reaction_output: serde_json::json!({"count": i}),
+                },
+            };
+            assert!(logger.log_handler_record(&record).await.is_ok());
+        }
+
+        let result = logger.end_test_run().await.unwrap();
+        assert!(result.has_output);
+        assert_eq!(result.logger_name, "PerformanceMetrics");
+        assert!(result.output_folder_path.is_some());
+
+        // Verify file exists
+        let metrics_path = temp_dir.path()
+            .join("outputs")
+            .join("performance_metrics")
+            .join("test_performance.json");
+        assert!(metrics_path.exists());
+        
+        // Verify content
+        let content = std::fs::read_to_string(metrics_path).unwrap();
+        assert!(content.contains("\"record_count\": 50"));
+        assert!(content.contains("\"records_per_second\""));
+    }
 }

@@ -143,6 +143,13 @@ impl TestRunReaction {
     ) -> anyhow::Result<Self> {
         // Output loggers are already in the correct format
         let output_loggers = definition.output_loggers.clone();
+        
+        log::info!(
+            "TestRunReaction::new() for {} with {} output loggers: {:?}", 
+            definition.id, 
+            output_loggers.len(),
+            output_loggers
+        );
 
         // Get stop triggers from test definition, allow overrides
         let mut stop_triggers = definition
