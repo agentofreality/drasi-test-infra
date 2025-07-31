@@ -67,6 +67,7 @@ pub struct TestServiceConfig {
 // The main function that starts the starts the Test Service.
 #[tokio::main]
 async fn main() {
+    // Initialize env_logger - back to simple init to respect RUST_LOG env var
     env_logger::init();
 
     // Parse the command line and env var args. If the args are invalid, return an error.

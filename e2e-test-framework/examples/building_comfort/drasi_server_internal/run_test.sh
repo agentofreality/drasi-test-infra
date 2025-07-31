@@ -18,4 +18,5 @@ GREEN="\033[32m"
 RESET="\033[0m"
 
 echo -e "${GREEN}\nRunning the E2E Test Service with Internal Drasi Server...${RESET}"
-RUST_LOG=info,drasi_core::query::continuous_query=off cargo run --release --manifest-path ./test-service/Cargo.toml -- --config examples/building_comfort/drasi_server_internal/config.json
+# Set drasi_core modules to error level to suppress INFO logs from tracing instrumentation
+RUST_LOG='warn,drasi_core::query::continuous_query=error,drasi_core::path_solver=error' cargo run --release --manifest-path ./test-service/Cargo.toml -- --config examples/building_comfort/drasi_server_internal/config.json

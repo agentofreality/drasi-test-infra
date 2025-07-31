@@ -31,7 +31,7 @@
                             "storage": {
                             "type": "memory"
                             },
-                            "log_level": "info,drasi_core::query::continuous_query=off",
+                            "log_level": "info",
                             "sources": [
                             {
                                 "name": "facilities-db",
@@ -77,7 +77,7 @@
                         "model_data_generator": {
                             "kind": "BuildingHierarchy",
                             "change_interval": [5000000000, 1000000000, 1000000000, 5000000000],
-                            "change_count": 3,
+                            "change_count": 100000,
                             "send_initial_inserts": true,
                             "seed": 123456789,
                             "spacing_mode": "none",
@@ -127,7 +127,7 @@
                         "stop_triggers": [
                             {
                             "kind": "RecordCount",
-                            "record_count": 3
+                            "record_count": 90000
                             }
                         ]
                         }

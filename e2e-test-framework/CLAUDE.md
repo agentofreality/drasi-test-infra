@@ -154,3 +154,17 @@ The framework deploys as a Drasi SourceProvider:
 - Port configuration is preserved in test definitions for compatibility but is not used internally
 - All component management (sources, queries, reactions) is done through DrasiServerCore's managers
 - Starting queries and reactions through the API returns an error as these operations are managed automatically by DrasiServerCore
+
+## Logging Configuration (2025-07-31)
+
+**Suppressing drasi_core Logs**: The drasi_core library uses the `tracing` crate with `#[tracing::instrument]` attributes that generate INFO level logs. To suppress these logs while keeping other logs visible:
+
+```bash
+# Set drasi_core modules to error level
+RUST_LOG='info,drasi_core::query::continuous_query=error,drasi_core::path_solver=error' cargo run ...
+```
+
+**Important Notes**:
+- Use `error` level instead of `off` for drasi_core modules (due to tracing/log interop)
+- The test-service uses `env_logger` which bridges tracing events to log events
+- Apply this pattern to both regular and debug test scripts
