@@ -69,6 +69,7 @@ pub struct TestDataStore {
     pub root_path: PathBuf,
     pub test_repo_store: Arc<Mutex<TestRepoStore>>,
     pub test_run_store: Arc<Mutex<TestRunStore>>,
+    cleaned_up: Arc<Mutex<bool>>,
 }
 
 impl TestDataStore {
@@ -133,6 +134,7 @@ impl TestDataStore {
             root_path: root_path.clone(),
             test_repo_store,
             test_run_store,
+            cleaned_up: Arc::new(Mutex::new(false)),
         };
 
         Ok(test_data_store)
@@ -468,16 +470,67 @@ impl TestDataStore {
             .get_data_collection_storage(id, false)
             .await
     }
+
+    /// Returns whether this TestDataStore is configured to delete its data on stop.
+    pub fn should_delete_on_stop(&self) -> bool {
+        self.delete_on_stop
+    }
+
+    /// Synchronously cleans up the TestDataStore by removing its root directory.
+    /// This method is primarily used as a fallback in the Drop trait.
+    /// For async contexts, prefer using `cleanup_async()`.
+    pub fn cleanup(&self) -> Result<(), std::io::Error> {
+        if self.delete_on_stop && self.root_path.exists() {
+            log::info!("Cleaning up TestDataStore at - {:?}", &self.root_path);
+            std::fs::remove_dir_all(&self.root_path)?;
+            log::info!("TestDataStore cleaned up successfully.");
+        }
+        Ok(())
+    }
+
+    /// Asynchronously cleans up the TestDataStore by removing its root directory.
+    /// 
+    /// This method:
+    /// - Checks if cleanup has already been performed to prevent double cleanup
+    /// - Uses async I/O operations to avoid blocking the runtime
+    /// - Sets a flag to indicate cleanup completion
+    /// 
+    /// This is the preferred cleanup method for async contexts, especially
+    /// in signal handlers where blocking operations should be avoided.
+    pub async fn cleanup_async(&self) -> Result<(), std::io::Error> {
+        // Check if already cleaned up
+        let mut cleaned_up = self.cleaned_up.lock().await;
+        if *cleaned_up {
+            log::debug!("TestDataStore already cleaned up, skipping...");
+            return Ok(());
+        }
+
+        if self.delete_on_stop && self.root_path.exists() {
+            log::info!("Cleaning up TestDataStore at - {:?}", &self.root_path);
+            tokio::fs::remove_dir_all(&self.root_path).await?;
+            log::info!("TestDataStore cleaned up successfully.");
+            *cleaned_up = true;
+        }
+        Ok(())
+    }
 }
 
 impl Drop for TestDataStore {
     fn drop(&mut self) {
-        if self.delete_on_stop {
-            log::info!("Deleting TestDataStore at - {:?}", &self.root_path);
+        // Check if already cleaned up using try_lock to avoid blocking
+        if let Ok(cleaned_up) = self.cleaned_up.try_lock() {
+            if *cleaned_up {
+                log::debug!("TestDataStore already cleaned up in signal handler, skipping Drop cleanup");
+                return;
+            }
+        }
+
+        if self.delete_on_stop && self.root_path.exists() {
+            log::info!("Deleting TestDataStore at - {:?} (in Drop)", &self.root_path);
 
             match std::fs::remove_dir_all(&self.root_path) {
-                Ok(_) => log::info!("TestDataStore deleted successfully."),
-                Err(err) => log::error!("Error deleting TestDataStore: {:?}", err),
+                Ok(_) => log::info!("TestDataStore deleted successfully (in Drop)."),
+                Err(err) => log::error!("Error deleting TestDataStore (in Drop): {:?}", err),
             }
         }
     }

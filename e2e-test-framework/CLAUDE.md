@@ -98,6 +98,16 @@ Main REST API endpoints (test-service):
 - `/api/runs` - Execute and monitor test runs
 - `/docs` - Interactive API documentation
 
+## TestDataStore Cleanup Behavior
+
+The test service properly handles cleanup of test data when configured with `delete_on_stop: true`:
+- **Signal Handling**: Explicit cleanup is performed when receiving SIGINT (Ctrl+C) or SIGTERM signals
+- **Async-Safe**: Uses async I/O operations to avoid blocking during shutdown
+- **No Double Cleanup**: Tracks cleanup state to prevent duplicate cleanup between signal handler and Drop trait
+- **Graceful Shutdown**: Ensures test data is cleaned up before the service terminates
+
+This ensures that temporary test data directories are properly removed even when the service is interrupted with Ctrl+C.
+
 ## Configuration
 
 Test configurations use JSON format with these key sections:

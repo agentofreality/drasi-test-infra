@@ -203,7 +203,7 @@ pub(crate) async fn start_web_api(
     let app = api_router
         .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .layer(axum::extract::Extension(data_collector))
-        .layer(axum::extract::Extension(test_data_store))
+        .layer(axum::extract::Extension(test_data_store.clone()))
         .layer(axum::extract::Extension(test_run_host));
 
     log::info!("Test Service Web API listening on http://{}", addr);
@@ -216,7 +216,7 @@ pub(crate) async fn start_web_api(
     let server = axum::Server::bind(&addr).serve(app.into_make_service());
 
     // Graceful shutdown when receiving `Ctrl+C` or SIGTERM
-    let graceful = server.with_graceful_shutdown(shutdown_signal());
+    let graceful = server.with_graceful_shutdown(shutdown_signal(test_data_store));
 
     log::info!("Press CTRL-C to stop the server...");
 
@@ -225,7 +225,16 @@ pub(crate) async fn start_web_api(
     }
 }
 
-async fn shutdown_signal() {
+/// Handles graceful shutdown signals (SIGINT/Ctrl+C and SIGTERM) for the test service.
+/// 
+/// This function performs the following cleanup operations:
+/// - Listens for both SIGINT (Ctrl+C) and SIGTERM signals
+/// - When a signal is received, explicitly cleans up the TestDataStore if delete_on_stop is enabled
+/// - Ensures cleanup happens before the server shuts down
+/// 
+/// The cleanup is performed explicitly here rather than relying solely on Drop trait
+/// to ensure it executes reliably during signal-based shutdown.
+async fn shutdown_signal(test_data_store: Arc<TestDataStore>) {
     // Create two tasks: one for Ctrl+C and another for SIGTERM
     // Either will trigger a shutdown
     let ctrl_c = async {
@@ -254,7 +263,17 @@ async fn shutdown_signal() {
     }
 
     log::info!("Cleaning up resources...");
-    // TODO: Perform cleanup here...
+    
+    // Perform explicit cleanup of TestDataStore
+    if test_data_store.should_delete_on_stop() {
+        log::info!("Performing TestDataStore cleanup on shutdown signal...");
+        if let Err(e) = test_data_store.cleanup_async().await {
+            log::error!("Error during TestDataStore cleanup: {}", e);
+        } else {
+            log::info!("TestDataStore cleanup completed successfully.");
+        }
+    }
+    
     log::info!("Resources cleaned up.");
 }
 
