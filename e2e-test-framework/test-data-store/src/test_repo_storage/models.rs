@@ -726,8 +726,8 @@ pub enum DrasiServerAuthConfig {
 /// Source configuration for Drasi Server
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DrasiSourceConfig {
-    /// Unique name for the source
-    pub name: String,
+    /// Unique identifier for the source
+    pub id: String,
 
     /// Type of source (e.g., "mock", "kafka", "database")
     pub source_type: String,
@@ -744,13 +744,13 @@ pub struct DrasiSourceConfig {
 /// Query configuration for Drasi Server
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DrasiQueryConfig {
-    /// Unique name for the query
-    pub name: String,
+    /// Unique identifier for the query
+    pub id: String,
 
     /// Cypher query string
     pub query: String,
 
-    /// Names of sources this query subscribes to
+    /// IDs of sources this query subscribes to
     pub sources: Vec<String>,
 
     /// Whether to automatically start this query
@@ -765,13 +765,13 @@ pub struct DrasiQueryConfig {
 /// Reaction configuration for Drasi Server
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DrasiReactionConfig {
-    /// Unique name for the reaction
-    pub name: String,
+    /// Unique identifier for the reaction
+    pub id: String,
 
     /// Type of reaction (e.g., "log", "webhook", "notification")
     pub reaction_type: String,
 
-    /// Names of queries this reaction subscribes to
+    /// IDs of queries this reaction subscribes to
     pub queries: Vec<String>,
 
     /// Whether to automatically start this reaction

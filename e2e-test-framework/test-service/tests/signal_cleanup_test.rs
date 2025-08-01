@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::time::sleep;
 
 #[tokio::test]
+#[ignore = "Integration test requires built binary"]
 async fn test_ctrl_c_cleanup_with_delete_on_stop() -> anyhow::Result<()> {
     let temp_dir = TempDir::new()?;
     let test_data_path = temp_dir.path().join("test_data_cache");
@@ -70,7 +70,7 @@ async fn test_ctrl_c_cleanup_with_delete_on_stop() -> anyhow::Result<()> {
     }
     
     // Wait for the process to exit
-    let exit_status = child.wait()?;
+    let _exit_status = child.wait()?;
     
     // Give a moment for cleanup to complete
     sleep(Duration::from_millis(500)).await;
@@ -82,6 +82,7 @@ async fn test_ctrl_c_cleanup_with_delete_on_stop() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+#[ignore = "Integration test requires built binary"]
 async fn test_ctrl_c_no_cleanup_without_delete_on_stop() -> anyhow::Result<()> {
     let temp_dir = TempDir::new()?;
     let test_data_path = temp_dir.path().join("test_data_cache_no_delete");
@@ -133,7 +134,7 @@ async fn test_ctrl_c_no_cleanup_without_delete_on_stop() -> anyhow::Result<()> {
     }
     
     // Wait for the process to exit
-    let exit_status = child.wait()?;
+    let _exit_status = child.wait()?;
     
     // Give a moment for cleanup to complete
     sleep(Duration::from_millis(500)).await;

@@ -265,7 +265,7 @@ impl TestRunDrasiServer {
                 // Convert our configs to drasi_server configs
                 let drasi_sources: Vec<drasi_server::config::SourceConfig> = config.sources.iter().map(|s| {
                     drasi_server::config::SourceConfig {
-                        name: s.name.clone(),
+                        id: s.id.clone(),
                         source_type: s.source_type.clone(),
                         auto_start: s.auto_start,
                         properties: s.properties.clone(),
@@ -274,7 +274,7 @@ impl TestRunDrasiServer {
                 
                 let drasi_queries: Vec<drasi_server::config::QueryConfig> = config.queries.iter().map(|q| {
                     drasi_server::config::QueryConfig {
-                        name: q.name.clone(),
+                        id: q.id.clone(),
                         query: q.query.clone(),
                         sources: q.sources.clone(),
                         auto_start: q.auto_start,
@@ -284,7 +284,7 @@ impl TestRunDrasiServer {
                 
                 let drasi_reactions: Vec<drasi_server::config::ReactionConfig> = config.reactions.iter().map(|r| {
                     drasi_server::config::ReactionConfig {
-                        name: r.name.clone(),
+                        id: r.id.clone(),
                         reaction_type: r.reaction_type.clone(),
                         queries: r.queries.clone(),
                         auto_start: r.auto_start,
@@ -332,11 +332,11 @@ impl TestRunDrasiServer {
                 
                 // Store configured component names for validation
                 let configured_source_names: std::collections::HashSet<String> =
-                    config.sources.iter().map(|s| s.name.clone()).collect();
+                    config.sources.iter().map(|s| s.id.clone()).collect();
                 let configured_query_names: std::collections::HashSet<String> =
-                    config.queries.iter().map(|q| q.name.clone()).collect();
+                    config.queries.iter().map(|q| q.id.clone()).collect();
                 let configured_reaction_names: std::collections::HashSet<String> =
-                    config.reactions.iter().map(|r| r.name.clone()).collect();
+                    config.reactions.iter().map(|r| r.id.clone()).collect();
 
                 // Store the core reference
                 {
@@ -352,12 +352,12 @@ impl TestRunDrasiServer {
                 
                 // Verify query status
                 for query_config in &config.queries {
-                    match core.query_manager().get_query_status(query_config.name.clone()).await {
+                    match core.query_manager().get_query_status(query_config.id.clone()).await {
                         Ok(status) => {
-                            log::info!("Query '{}' status after startup: {:?}", query_config.name, status);
+                            log::info!("Query '{}' status after startup: {:?}", query_config.id, status);
                         }
                         Err(e) => {
-                            log::error!("Failed to get status for query '{}': {}", query_config.name, e);
+                            log::error!("Failed to get status for query '{}': {}", query_config.id, e);
                         }
                     }
                 }
@@ -369,17 +369,17 @@ impl TestRunDrasiServer {
                     
                     // Get handles from source manager for configured sources
                     for source_config in &config.sources {
-                        if let Some(handle) = core.source_manager().get_application_handle(&source_config.name).await {
-                            stored_handles.insert(source_config.name.clone(), ApplicationHandle::source_only(handle));
+                        if let Some(handle) = core.source_manager().get_application_handle(&source_config.id).await {
+                            stored_handles.insert(source_config.id.clone(), ApplicationHandle::source_only(handle));
                             log::info!(
                                 "Stored ApplicationHandle for source '{}' on Drasi Server {}",
-                                source_config.name,
+                                source_config.id,
                                 self.definition.id
                             );
                         } else {
                             log::warn!(
                                 "Could not get ApplicationHandle for source '{}' on Drasi Server {}",
-                                source_config.name,
+                                source_config.id,
                                 self.definition.id
                             );
                         }
@@ -387,17 +387,17 @@ impl TestRunDrasiServer {
                     
                     // Get handles from reaction manager for configured reactions  
                     for reaction_config in &config.reactions {
-                        if let Some(handle) = core.reaction_manager().get_application_handle(&reaction_config.name).await {
-                            stored_handles.insert(reaction_config.name.clone(), ApplicationHandle::reaction_only(handle));
+                        if let Some(handle) = core.reaction_manager().get_application_handle(&reaction_config.id).await {
+                            stored_handles.insert(reaction_config.id.clone(), ApplicationHandle::reaction_only(handle));
                             log::info!(
                                 "Stored ApplicationHandle for reaction '{}' on Drasi Server {}",
-                                reaction_config.name,
+                                reaction_config.id,
                                 self.definition.id
                             );
                         } else {
                             log::warn!(
                                 "Could not get ApplicationHandle for reaction '{}' on Drasi Server {}",
-                                reaction_config.name,
+                                reaction_config.id,
                                 self.definition.id
                             );
                         }

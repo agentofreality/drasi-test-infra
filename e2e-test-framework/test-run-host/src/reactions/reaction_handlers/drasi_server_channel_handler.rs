@@ -148,7 +148,7 @@ impl DrasiServerChannelHandler {
                                 while let Some(query_result) = stream.next().await {
                                     // Convert QueryResult to JSON for the channel
                                     let result_json = serde_json::json!({
-                                        "query_name": query_result.query_name,
+                                        "query_id": query_result.query_id,
                                         "results": query_result.results,
                                         "metadata": query_result.metadata,
                                     });

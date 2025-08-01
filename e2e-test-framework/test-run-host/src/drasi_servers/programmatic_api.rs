@@ -37,7 +37,7 @@ impl TestRunDrasiServer {
                 // We need to get the full source config to get the type
                 if let Some(config) = core.source_manager().get_source_config(&name).await {
                     source_infos.push(SourceInfo {
-                        name: config.name,
+                        name: config.id,
                         source_type: config.source_type,
                         status: convert_component_status(status),
                     });
@@ -59,7 +59,7 @@ impl TestRunDrasiServer {
                 .ok_or_else(|| anyhow!("Source config not found"))?;
             
             Ok(SourceDetails {
-                name: source_runtime.name,
+                name: source_runtime.id,
                 source_type: source_runtime.source_type,
                 status: convert_component_status(source_runtime.status),
                 auto_start: config.auto_start,
@@ -74,7 +74,7 @@ impl TestRunDrasiServer {
     ) -> Result<SourceCreatedResponse> {
         self.with_core(|core| async move {
             let config = SourceConfig {
-                name: request.name.clone(),
+                id: request.name.clone(),
                 source_type: request.source_type,
                 auto_start: request.auto_start,
                 properties: serde_json::from_value(request.properties)?,
@@ -100,7 +100,7 @@ impl TestRunDrasiServer {
         let source_id_clone = source_id_str.clone();
         self.with_core(|core| async move {
             let config = SourceConfig {
-                name: source_id_clone.clone(),
+                id: source_id_clone.clone(),
                 source_type: request.source_type.unwrap_or(existing.source_type),
                 auto_start: request.auto_start.unwrap_or(existing.auto_start),
                 properties: if let Some(props) = request.properties {
@@ -158,7 +158,7 @@ impl TestRunDrasiServer {
                 // We need to get the full query config to get sources
                 if let Some(config) = core.query_manager().get_query_config(&name).await {
                     query_infos.push(QueryInfo {
-                        name: config.name,
+                        name: config.id,
                         sources: config.sources,
                         status: convert_component_status(status),
                     });
@@ -180,7 +180,7 @@ impl TestRunDrasiServer {
                 .ok_or_else(|| anyhow!("Query config not found"))?;
             
             Ok(QueryDetails {
-                name: query_runtime.name,
+                name: query_runtime.id,
                 query: query_runtime.query,
                 sources: query_runtime.sources,
                 status: convert_component_status(query_runtime.status),
@@ -200,7 +200,7 @@ impl TestRunDrasiServer {
             }
 
             let config = QueryConfig {
-                name: request.name.clone(),
+                id: request.name.clone(),
                 query: request.query,
                 sources: request.sources,
                 auto_start: request.auto_start,
@@ -232,7 +232,7 @@ impl TestRunDrasiServer {
             }
 
             let config = QueryConfig {
-                name: query_id_clone.clone(),
+                id: query_id_clone.clone(),
                 query: request.query.unwrap_or(existing.query),
                 sources: request.sources.unwrap_or(existing.sources),
                 auto_start: request.auto_start.unwrap_or(existing.auto_start),
@@ -292,7 +292,7 @@ impl TestRunDrasiServer {
                 // We need to get the full reaction config to get type and queries
                 if let Some(config) = core.reaction_manager().get_reaction_config(&name).await {
                     reaction_infos.push(ReactionInfo {
-                        name: config.name,
+                        name: config.id,
                         reaction_type: config.reaction_type,
                         queries: config.queries,
                         status: convert_component_status(status),
@@ -315,7 +315,7 @@ impl TestRunDrasiServer {
                 .ok_or_else(|| anyhow!("Reaction config not found"))?;
             
             Ok(ReactionDetails {
-                name: reaction_runtime.name,
+                name: reaction_runtime.id,
                 reaction_type: reaction_runtime.reaction_type,
                 queries: reaction_runtime.queries,
                 status: convert_component_status(reaction_runtime.status),
@@ -331,7 +331,7 @@ impl TestRunDrasiServer {
     ) -> Result<ReactionCreatedResponse> {
         self.with_core(|core| async move {
             let config = ReactionConfig {
-                name: request.name.clone(),
+                id: request.name.clone(),
                 reaction_type: request.reaction_type,
                 queries: request.queries,
                 auto_start: request.auto_start,
@@ -358,7 +358,7 @@ impl TestRunDrasiServer {
         let reaction_id_clone = reaction_id_str.clone();
         self.with_core(|core| async move {
             let config = ReactionConfig {
-                name: reaction_id_clone.clone(),
+                id: reaction_id_clone.clone(),
                 reaction_type: request.reaction_type.unwrap_or(existing.reaction_type),
                 queries: request.queries.unwrap_or(existing.queries),
                 auto_start: request.auto_start.unwrap_or(existing.auto_start),

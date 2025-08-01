@@ -96,7 +96,7 @@ mod tests {
             storage: None,
             sources: vec![
                 test_data_store::test_repo_storage::models::DrasiSourceConfig {
-                    name: "test-source".to_string(),
+                    id: "test-source".to_string(),
                     source_type: "internal.application".to_string(),
                     auto_start: true,
                     properties: std::collections::HashMap::new(),
@@ -104,7 +104,7 @@ mod tests {
             ],
             queries: vec![
                 test_data_store::test_repo_storage::models::DrasiQueryConfig {
-                    name: "test-query".to_string(),
+                    id: "test-query".to_string(),
                     query: "MATCH (n:TestNode) RETURN n.id as id, n.value as value".to_string(),
                     sources: vec!["test-source".to_string()],
                     auto_start: true,
@@ -113,7 +113,7 @@ mod tests {
             ],
             reactions: vec![
                 test_data_store::test_repo_storage::models::DrasiReactionConfig {
-                    name: "test-reaction".to_string(),
+                    id: "test-reaction".to_string(),
                     reaction_type: "internal.application".to_string(),
                     queries: vec!["test-query".to_string()],
                     auto_start: true,

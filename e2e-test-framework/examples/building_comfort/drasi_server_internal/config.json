@@ -30,7 +30,7 @@
                             "log_level": "info",
                             "sources": [
                             {
-                                "name": "facilities-db",
+                                "id": "facilities-db",
                                 "source_type": "internal.application",
                                 "auto_start": true,
                                 "properties": {}
@@ -38,7 +38,7 @@
                             ],
                             "queries": [
                             {
-                                "name": "all-rooms",
+                                "id": "all-rooms",
                                 "query": "MATCH (r:Room) RETURN elementId(r) AS RoomId, 50 + (r.temperature - 72) + (r.humidity - 42) + (r.co2 / 25) AS ComfortLevel",
                                 "sources": ["facilities-db"],
                                 "auto_start": true,
@@ -47,7 +47,7 @@
                             ],
                             "reactions": [
                             {
-                                "name": "building-comfort-alerts",
+                                "id": "building-comfort-alerts",
                                 "reaction_type": "internal.application",
                                 "queries": ["all-rooms"],
                                 "auto_start": true,
