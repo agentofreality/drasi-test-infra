@@ -258,7 +258,7 @@ mod tests {
             reaction_output_path: temp_dir.path().join("output"),
         };
         
-        let config = PerformanceMetricsOutputLoggerConfig {
+        let _config = PerformanceMetricsOutputLoggerConfig {
             filename: Some("test_metrics.json".to_string()),
         };
         

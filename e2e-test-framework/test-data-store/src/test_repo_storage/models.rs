@@ -587,9 +587,6 @@ pub struct TestDrasiServerDefinition {
 /// Runtime configuration for a Drasi Server instance
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DrasiServerConfig {
-    /// HTTP binding configuration
-    pub binding: DrasiServerBinding,
-
     /// Runtime configuration (thread pool size, etc.)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub runtime: Option<DrasiServerRuntimeConfig>,
@@ -621,38 +618,6 @@ pub struct DrasiServerConfig {
     /// Additional server-specific configuration
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
-}
-
-/// HTTP binding configuration for Drasi Server
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DrasiServerBinding {
-    /// Host address to bind to (e.g., "0.0.0.0", "127.0.0.1")
-    #[serde(default = "default_host")]
-    pub host: String,
-
-    /// Port to bind to (0 for automatic assignment)
-    #[serde(default = "default_port")]
-    pub port: u16,
-
-    /// Enable TLS
-    #[serde(default)]
-    pub tls: bool,
-
-    /// TLS certificate path
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cert_path: Option<String>,
-
-    /// TLS key path
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub key_path: Option<String>,
-}
-
-fn default_host() -> String {
-    "127.0.0.1".to_string()
-}
-
-fn default_port() -> u16 {
-    0 // Let the OS assign a port
 }
 
 /// Runtime configuration for Drasi Server
@@ -818,22 +783,9 @@ pub struct DrasiReactionConfig {
     pub properties: HashMap<String, serde_json::Value>,
 }
 
-impl Default for DrasiServerBinding {
-    fn default() -> Self {
-        Self {
-            host: default_host(),
-            port: default_port(),
-            tls: false,
-            cert_path: None,
-            key_path: None,
-        }
-    }
-}
-
 impl Default for DrasiServerConfig {
     fn default() -> Self {
         Self {
-            binding: DrasiServerBinding::default(),
             runtime: None,
             storage: None,
             auth: None,

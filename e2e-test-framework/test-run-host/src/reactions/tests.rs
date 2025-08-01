@@ -230,13 +230,24 @@ mod tests {
 
         let reaction = TestRunReaction::new(definition, reaction_storage.clone()).await?;
 
-        // Should be running immediately
+        // With the new design, reactions don't auto-start themselves
+        // TestRunHost is responsible for starting reactions with start_immediately=true
+        let state = reaction.get_state().await?;
+        assert_eq!(
+            state.reaction_observer.status,
+            reaction_observer::ReactionObserverStatus::Stopped
+        );
+        assert!(state.start_immediately);
+        
+        // Manually start the reaction to test it can be started
+        reaction.start_reaction_observer().await?;
+        
+        // Now it should be running
         let state = reaction.get_state().await?;
         assert_eq!(
             state.reaction_observer.status,
             reaction_observer::ReactionObserverStatus::Running
         );
-        assert!(state.start_immediately);
 
         // Clean up
         reaction.stop_reaction_observer().await?;

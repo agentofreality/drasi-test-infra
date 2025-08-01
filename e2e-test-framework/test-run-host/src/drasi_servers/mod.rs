@@ -17,7 +17,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use derive_more::Debug;
-use drasi_server::{ApplicationHandle, RuntimeConfig, server_core::{DrasiServerCore, ServerHandle}};
+use drasi_server::{ApplicationHandle, RuntimeConfig, server_core::DrasiServerCore};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use utoipa::ToSchema;
@@ -56,9 +56,6 @@ fn default_start_immediately() -> bool {
 /// Overrides for Drasi Server configuration at runtime
 #[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
 pub struct TestRunDrasiServerOverrides {
-    /// Override the port (useful for avoiding conflicts)
-    pub port: Option<u16>,
-
     /// Override authentication settings
     pub auth: Option<test_data_store::test_repo_storage::models::DrasiServerAuthConfig>,
 
@@ -138,9 +135,6 @@ impl TestRunDrasiServerDefinition {
         let mut config = self.test_drasi_server_definition.config.clone();
 
         if let Some(overrides) = &self.test_run_overrides {
-            if let Some(port) = overrides.port {
-                config.binding.port = port;
-            }
             if let Some(auth) = &overrides.auth {
                 config.auth = Some(auth.clone());
             }
@@ -205,7 +199,7 @@ pub struct TestRunDrasiServer {
     pub state: Arc<RwLock<TestRunDrasiServerState>>,
     pub storage: TestRunDrasiServerStorage,
     #[debug(skip)]
-    server_handle: Arc<RwLock<Option<ServerHandle>>>,
+    drasi_core: Arc<RwLock<Option<Arc<DrasiServerCore>>>>,
     #[debug(skip)]
     application_handles: Arc<RwLock<HashMap<String, ApplicationHandle>>>,
 }
@@ -219,7 +213,7 @@ impl TestRunDrasiServer {
             definition,
             state: Arc::new(RwLock::new(TestRunDrasiServerState::Uninitialized)),
             storage,
-            server_handle: Arc::new(RwLock::new(None)),
+            drasi_core: Arc::new(RwLock::new(None)),
             application_handles: Arc::new(RwLock::new(HashMap::new())),
         };
 
@@ -302,7 +296,7 @@ impl TestRunDrasiServer {
                 let runtime_config = Arc::new(RuntimeConfig {
                     server: drasi_server::config::schema::ServerSettings {
                         host: "0.0.0.0".to_string(),
-                        port: config.binding.port,
+                        port: 0, // Not used by DrasiServerCore (embedded library)
                         log_level: log_level.to_string(),
                         max_connections: 1000,
                         shutdown_timeout_seconds: 30,
@@ -313,7 +307,7 @@ impl TestRunDrasiServer {
                 });
                 
                 // Create the DrasiServerCore instance
-                let core = Arc::new(DrasiServerCore::new(runtime_config));
+                let mut core = DrasiServerCore::new(runtime_config);
                 
                 // Log configuration summary
                 log::info!(
@@ -323,6 +317,19 @@ impl TestRunDrasiServer {
                     config.reactions.len()
                 );
                 
+                // Initialize the core to create all components
+                log::info!("Initializing DrasiServerCore to create components...");
+                core.initialize().await
+                    .map_err(|e| anyhow::anyhow!("Failed to initialize DrasiServerCore: {}", e))?;
+                
+                // Store the core after initialization but before starting
+                let core = Arc::new(core);
+                
+                // Start the core to start all auto-start components
+                log::info!("Starting DrasiServerCore to start auto-start components...");
+                core.start().await
+                    .map_err(|e| anyhow::anyhow!("Failed to start DrasiServerCore: {}", e))?;
+                
                 // Store configured component names for validation
                 let configured_source_names: std::collections::HashSet<String> =
                     config.sources.iter().map(|s| s.name.clone()).collect();
@@ -331,25 +338,21 @@ impl TestRunDrasiServer {
                 let configured_reaction_names: std::collections::HashSet<String> =
                     config.reactions.iter().map(|r| r.name.clone()).collect();
 
-                // Extract the core from the Arc (we need ownership to call start_legacy)
-                // Since we're the only holder of the Arc at this point, try_unwrap should succeed
-                let core = Arc::try_unwrap(core)
-                    .map_err(|_| anyhow::anyhow!("Failed to unwrap DrasiServerCore Arc"))?;
+                // Store the core reference
+                {
+                    let mut core_guard = self.drasi_core.write().await;
+                    *core_guard = Some(core.clone());
+                }
                 
-                // Start the core using the legacy method - this consumes the core and returns a ServerHandle
-                log::info!("Starting DrasiServerCore with {} sources, {} queries, {} reactions configured",
+                log::info!("DrasiServerCore initialized with {} sources, {} queries, {} reactions configured",
                     config.sources.len(), config.queries.len(), config.reactions.len());
-                let server_handle = core.start_legacy()
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Failed to start DrasiServer: {}", e))?;
                 
-                // Log the status of components after startup
-                log::info!("DrasiServerCore started, verifying component status...");
+                // Log the status of components
+                log::info!("DrasiServerCore ready, verifying component status...");
                 
-                // Verify query status after startup
-                let core_ref = server_handle.core();
+                // Verify query status
                 for query_config in &config.queries {
-                    match core_ref.query_manager().get_query_status(query_config.name.clone()).await {
+                    match core.query_manager().get_query_status(query_config.name.clone()).await {
                         Ok(status) => {
                             log::info!("Query '{}' status after startup: {:?}", query_config.name, status);
                         }
@@ -359,16 +362,14 @@ impl TestRunDrasiServer {
                     }
                 }
                 
-                // Get and store application handles from the core managers AFTER starting
-                // This ensures auto_start components are running
+                // Get and store application handles from the core managers
                 {
                     let mut stored_handles = self.application_handles.write().await;
                     stored_handles.clear();
                     
                     // Get handles from source manager for configured sources
-                    let core_ref = server_handle.core();
                     for source_config in &config.sources {
-                        if let Some(handle) = core_ref.source_manager().get_application_handle(&source_config.name).await {
+                        if let Some(handle) = core.source_manager().get_application_handle(&source_config.name).await {
                             stored_handles.insert(source_config.name.clone(), ApplicationHandle::source_only(handle));
                             log::info!(
                                 "Stored ApplicationHandle for source '{}' on Drasi Server {}",
@@ -386,7 +387,7 @@ impl TestRunDrasiServer {
                     
                     // Get handles from reaction manager for configured reactions  
                     for reaction_config in &config.reactions {
-                        if let Some(handle) = core_ref.reaction_manager().get_application_handle(&reaction_config.name).await {
+                        if let Some(handle) = core.reaction_manager().get_application_handle(&reaction_config.name).await {
                             stored_handles.insert(reaction_config.name.clone(), ApplicationHandle::reaction_only(handle));
                             log::info!(
                                 "Stored ApplicationHandle for reaction '{}' on Drasi Server {}",
@@ -435,8 +436,6 @@ impl TestRunDrasiServer {
                     start_time: chrono::Utc::now(),
                 };
 
-                // Store the server handle for shutdown
-                *self.server_handle.write().await = Some(server_handle);
 
                 // Write server config to storage
                 let config_json = serde_json::to_value(&config)?;
@@ -470,13 +469,17 @@ impl TestRunDrasiServer {
 
         match &*state {
             TestRunDrasiServerState::Running { .. } => {
-                // Get the server handle
-                let mut handle_guard = self.server_handle.write().await;
-                if let Some(server_handle) = handle_guard.take() {
-                    // Shutdown the server using the ServerHandle
-                    server_handle.shutdown()
-                        .await
-                        .map_err(|e| anyhow::anyhow!("Failed to shutdown server: {}", e))?;
+                // Clear the core reference
+                // Note: DrasiServerCore doesn't need explicit shutdown
+                {
+                    let mut core_guard = self.drasi_core.write().await;
+                    *core_guard = None;
+                }
+
+                // Clear application handles
+                {
+                    let mut handles = self.application_handles.write().await;
+                    handles.clear();
                 }
 
                 // Update state
@@ -499,17 +502,22 @@ impl TestRunDrasiServer {
     }
 
     pub async fn get_server_core(&self) -> Option<Arc<drasi_server::server_core::DrasiServerCore>> {
-        let handle_guard = self.server_handle.read().await;
-        handle_guard.as_ref().map(|h| h.core().clone())
+        let core_guard = self.drasi_core.read().await;
+        core_guard.clone()
     }
 
     pub async fn get_server_port(&self) -> Option<u16> {
-        // DrasiServerCore doesn't use ports
+        // DrasiServerCore doesn't use ports - it's an embedded library, not a network server
         None
     }
 
+    /// Returns the API endpoint for this Drasi Server.
+    /// 
+    /// **Note**: This always returns `None` because DrasiServerCore is an embedded library
+    /// that provides programmatic access to Drasi functionality, not a standalone server
+    /// with HTTP endpoints. The test infrastructure wraps DrasiServerCore with its own
+    /// REST API (test-service) for external access.
     pub async fn get_api_endpoint(&self) -> Option<String> {
-        // DrasiServerCore doesn't provide a Web API endpoint
         None
     }
 
@@ -523,11 +531,10 @@ impl TestRunDrasiServer {
         Fut: std::future::Future<Output = anyhow::Result<T>> + Send + 'static,
         T: Send + 'static,
     {
-        let handle_guard = self.server_handle.read().await;
-        match handle_guard.as_ref() {
-            Some(handle) => {
-                let core = handle.core().clone();
-                f(core).await
+        let core_guard = self.drasi_core.read().await;
+        match core_guard.as_ref() {
+            Some(core) => {
+                f(core.clone()).await
             }
             None => Err(anyhow::anyhow!("DrasiServerCore not available - server not running")),
         }
@@ -550,20 +557,20 @@ impl Drop for TestRunDrasiServer {
     fn drop(&mut self) {
         // Schedule cleanup of the server if it's still running
         let state = self.state.clone();
-        let server_handle = self.server_handle.clone();
+        let drasi_core = self.drasi_core.clone();
         let id = self.definition.id.clone();
 
         tokio::spawn(async move {
             let current_state = state.read().await;
             if matches!(*current_state, TestRunDrasiServerState::Running { .. }) {
                 log::warn!(
-                    "Drasi Server {} is being dropped while still running, attempting cleanup",
+                    "Drasi Server {} is being dropped while still running, clearing core reference",
                     id
                 );
 
-                if let Some(server_handle) = server_handle.write().await.take() {
-                    let _ = server_handle.shutdown().await;
-                }
+                // Clear the core reference
+                let mut core_guard = drasi_core.write().await;
+                *core_guard = None;
             }
         });
     }

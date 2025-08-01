@@ -145,15 +145,27 @@ The framework deploys as a Drasi SourceProvider:
 - The framework validates that TestSource/TestReaction IDs match configured component names
 - See `examples/building_comfort/drasi_server_internal` for a complete example
 
-## DrasiServerCore Integration (2025-07-29)
+## DrasiServerCore Integration (2025-07-29, Updated 2025-08-01)
 
 **Architecture Note**: The test infrastructure uses `DrasiServerCore` instead of `DrasiServer`:
-- DrasiServerCore contains only the Source, Query, and Reaction functionality needed for testing
-- The Test Service provides its own REST API that wraps DrasiServerCore's programmatic API
-- The `api_endpoint` field will always return `None` as DrasiServerCore doesn't expose a Web API
-- Port configuration is preserved in test definitions for compatibility but is not used internally
-- All component management (sources, queries, reactions) is done through DrasiServerCore's managers
-- Starting queries and reactions through the API returns an error as these operations are managed automatically by DrasiServerCore
+- DrasiServerCore is an **embedded library**, not a standalone server - it provides programmatic access to Drasi functionality
+- The Test Service provides its own REST API that wraps DrasiServerCore's programmatic API for external access
+- The `api_endpoint` field will always return `None` as DrasiServerCore doesn't expose any Web API or bind to network ports
+- The `binding` configuration has been removed (as of 2025-08-01) since DrasiServerCore doesn't use network bindings
+- All component management (sources, queries, reactions) is done through DrasiServerCore's managers via direct method calls
+
+**Lifecycle Changes (2025-08-01)**:
+- The `start_legacy()` method has been removed from DrasiServerCore
+- DrasiServerCore now requires a two-step initialization:
+  1. `initialize()` - Creates all configured components and sets up routers
+  2. `start()` - Starts all components marked with `auto_start: true`
+- Components are started in sequence: Sources → Queries → Reactions
+- Application handles are available after components are started
+- Shutdown is handled by dropping the DrasiServerCore reference - no explicit shutdown needed
+
+**Important**: Don't confuse DrasiServerCore with a full DrasiServer:
+- DrasiServerCore = Library for embedding Drasi functionality into applications
+- DrasiServer = Standalone server application with HTTP endpoints (not used in test infrastructure)
 
 ## Logging Configuration (2025-07-31)
 

@@ -20,10 +20,6 @@
                         "name": "Internal Drasi Server for Building Comfort",
                         "description": "Embedded Drasi Server instance for testing",
                         "config": {
-                            "binding": {
-                            "host": "127.0.0.1",
-                            "port": 0
-                            },
                             "runtime": {
                             "workers": 4,
                             "queue_size": 1000

@@ -40,7 +40,7 @@ pub use test_run_host::drasi_servers::api_models::DrasiServerError;
         (status = 400, description = "Invalid configuration"),
         (status = 500, description = "Internal server error")
     ),
-    tag = "drasi_servers"
+    tag = "drasi-servers"
 )]
 pub async fn create_drasi_server(
     Extension(test_run_host): Extension<Arc<TestRunHost>>,
@@ -60,7 +60,7 @@ pub async fn create_drasi_server(
         (status = 200, description = "List of Drasi Servers", body = Vec<DrasiServerInfo>),
         (status = 500, description = "Internal server error")
     ),
-    tag = "drasi_servers"
+    tag = "drasi-servers"
 )]
 pub async fn list_drasi_servers(
     Extension(test_run_host): Extension<Arc<TestRunHost>>,
@@ -102,7 +102,7 @@ pub async fn list_drasi_servers(
         (status = 404, description = "Drasi Server not found"),
         (status = 500, description = "Internal server error")
     ),
-    tag = "drasi_servers"
+    tag = "drasi-servers"
 )]
 pub async fn get_drasi_server(
     Extension(test_run_host): Extension<Arc<TestRunHost>>,
@@ -143,7 +143,7 @@ pub async fn get_drasi_server(
         (status = 404, description = "Drasi Server not found"),
         (status = 500, description = "Internal server error")
     ),
-    tag = "drasi_servers"
+    tag = "drasi-servers"
 )]
 pub async fn delete_drasi_server(
     Extension(test_run_host): Extension<Arc<TestRunHost>>,
@@ -178,7 +178,7 @@ pub async fn delete_drasi_server(
         (status = 404, description = "Drasi Server not found"),
         (status = 500, description = "Internal server error")
     ),
-    tag = "drasi_servers"
+    tag = "drasi-servers"
 )]
 pub async fn get_drasi_server_status(
     Extension(test_run_host): Extension<Arc<TestRunHost>>,
