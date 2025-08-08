@@ -125,66 +125,77 @@ impl DrasiServerChannelSourceChangeDispatcher {
             );
 
             // Get the Drasi Server and application handle
-            let drasi_servers = test_run_host.drasi_servers.read().await;
-            if let Some(drasi_server) = drasi_servers.get(&drasi_server_id) {
-                if let Some(app_handle) = drasi_server.get_application_handle(&source_id).await {
-                    if let Some(_source_handle) = &app_handle.source {
-                        log::info!(
+            let test_runs = test_run_host.test_runs.read().await;
+            if let Some(test_run) = test_runs.get(&drasi_server_id.test_run_id) {
+                if let Some(drasi_server) = test_run
+                    .drasi_servers
+                    .get(&drasi_server_id.test_drasi_server_id)
+                {
+                    if let Some(app_handle) = drasi_server.get_application_handle(&source_id).await
+                    {
+                        if let Some(_source_handle) = &app_handle.source {
+                            log::info!(
                             "Successfully obtained ApplicationSourceHandle for source '{}' on Drasi Server {}",
                             source_id, drasi_server_id
                         );
 
-                        // Process events from the channel
-                        while let Some(events) = receiver.recv().await {
-                            log::info!(
-                                "Channel receiver for source {} received {} events",
-                                source_id,
-                                events.len()
-                            );
+                            // Process events from the channel
+                            while let Some(events) = receiver.recv().await {
+                                log::info!(
+                                    "Channel receiver for source {} received {} events",
+                                    source_id,
+                                    events.len()
+                                );
 
-                            // Convert and send events to Drasi Server
-                            if let Some(source_handle) = &app_handle.source {
-                                for event in &events {
-                                    log::info!(
+                                // Convert and send events to Drasi Server
+                                if let Some(source_handle) = &app_handle.source {
+                                    for event in &events {
+                                        log::info!(
                                         "Dispatching event with op '{}' to source '{}' via ApplicationSourceHandle",
                                         event.op, source_id
                                     );
 
-                                    // Dispatch the event based on operation and type
-                                    if let Err(e) =
-                                        dispatch_event_to_drasi(source_handle, event).await
-                                    {
-                                        log::error!(
-                                            "Failed to dispatch event to source '{}': {}",
-                                            source_id,
-                                            e
-                                        );
+                                        // Dispatch the event based on operation and type
+                                        if let Err(e) =
+                                            dispatch_event_to_drasi(source_handle, event).await
+                                        {
+                                            log::error!(
+                                                "Failed to dispatch event to source '{}': {}",
+                                                source_id,
+                                                e
+                                            );
+                                        }
                                     }
-                                }
 
-                                log::info!(
+                                    log::info!(
                                     "Successfully dispatched {} events to source '{}' via ApplicationSourceHandle",
                                     events.len(),
                                     source_id
                                 );
-                            } else {
-                                log::error!(
-                                    "No source handle available for source '{}'",
-                                    source_id
-                                );
+                                } else {
+                                    log::error!(
+                                        "No source handle available for source '{}'",
+                                        source_id
+                                    );
+                                }
                             }
+                        } else {
+                            log::error!(
+                                "No source handle found in application handle for source '{}'",
+                                source_id
+                            );
                         }
                     } else {
-                        log::error!(
-                            "No source handle found in application handle for source '{}'",
-                            source_id
-                        );
+                        log::error!("No application handle found for source '{}'", source_id);
                     }
                 } else {
-                    log::error!("No application handle found for source '{}'", source_id);
+                    log::error!(
+                        "Drasi Server {} not found in test run",
+                        drasi_server_id.test_drasi_server_id
+                    );
                 }
             } else {
-                log::error!("Drasi Server {} not found", drasi_server_id);
+                log::error!("Test run {} not found", drasi_server_id.test_run_id);
             }
 
             log::info!(
@@ -325,7 +336,6 @@ impl SourceChangeDispatcher for DrasiServerChannelSourceChangeDispatcher {
         }
     }
 }
-    
 
 /// Dispatch a test framework SourceChangeEvent to Drasi using ApplicationSourceHandle helper methods
 async fn dispatch_event_to_drasi(

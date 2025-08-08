@@ -24,13 +24,19 @@ use test_run_host::TestRunHost;
 use utoipa::OpenApi;
 
 use crate::web_api::drasi_servers::DrasiServerError;
-use test_run_host::drasi_servers::api_models::{
-    CreateReactionRequest, UpdateReactionRequest,
-};
+use test_run_host::drasi_servers::api_models::{CreateReactionRequest, UpdateReactionRequest};
 
 #[allow(dead_code)]
 #[derive(OpenApi)]
-#[openapi(paths(list_reactions, get_reaction, create_reaction, update_reaction, delete_reaction, start_reaction, stop_reaction))]
+#[openapi(paths(
+    list_reactions,
+    get_reaction,
+    create_reaction,
+    update_reaction,
+    delete_reaction,
+    start_reaction,
+    stop_reaction
+))]
 pub struct DrasiServerReactionsApi;
 
 /// List all reactions on a Drasi Server
@@ -56,7 +62,7 @@ pub async fn list_reactions(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {
@@ -96,7 +102,7 @@ pub async fn get_reaction(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {
@@ -145,7 +151,7 @@ pub async fn create_reaction(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {
@@ -190,7 +196,7 @@ pub async fn update_reaction(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {
@@ -230,7 +236,7 @@ pub async fn delete_reaction(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {
@@ -273,7 +279,7 @@ pub async fn start_reaction(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {
@@ -316,7 +322,7 @@ pub async fn stop_reaction(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {

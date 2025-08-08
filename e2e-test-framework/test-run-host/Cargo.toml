@@ -3,6 +3,9 @@ name = "test-run-host"
 version = "0.1.0"
 edition = "2021"
 
+[build-dependencies]
+tonic-build = "0.8"
+
 [dependencies]
 drasi-comms-abstractions = { path = "../infrastructure/comms-abstractions" }
 drasi-comms-dapr = { path = "../infrastructure/comms-dapr" }
@@ -37,6 +40,8 @@ tempfile = "3.2"
 thiserror = "1.0.63"
 time = "0.3.37"
 tonic = "0.8"
+prost = "0.11"
+prost-types = "0.11"
 tokio = { version = "1.37.0", features = ["full"] }
 tokio-stream = "0.1.17"
 tracing = "0.1.37"

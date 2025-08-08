@@ -139,9 +139,11 @@ async fn main() {
                 panic!("Error creating TestRunHost: {}", err);
             }),
     );
-    
+
     // Now that TestRunHost is wrapped in Arc, set it on sources and start auto-start sources
-    test_run_host.initialize_sources(test_run_host.clone()).await
+    test_run_host
+        .initialize_sources(test_run_host.clone())
+        .await
         .unwrap_or_else(|err| {
             panic!("Error initializing sources: {}", err);
         });

@@ -132,6 +132,19 @@ The framework deploys as a Drasi SourceProvider:
 - Redis is required for query result streaming
 - Dapr sidecar is optional but recommended for distributed scenarios
 
+## gRPC Integration with Drasi (2025-08-08)
+
+**Breaking Change**: The gRPC implementation has been completely replaced to use Drasi's official v1 protocol:
+- The custom proto files (`source_dispatcher.proto`, `reaction_handler.proto`) have been removed
+- Now uses Drasi's official proto definitions from `drasi/v1/*.proto`
+- `GrpcSourceChangeDispatcher` now implements `drasi.v1.SourceService` client
+- `GrpcReactionHandler` now implements `drasi.v1.ReactionService` server
+- Configuration changes:
+  - Source dispatcher requires `source_id` field
+  - Reaction handler requires `query_ids` array and optional `include_initial_state`
+- Data model conversions handle Drasi's Node/Relation/Element structure
+- This is a breaking change - existing gRPC configurations must be updated
+
 ## Configuration Changes (2025-07-25)
 
 **Breaking Change**: Logger configurations have been moved from test definitions to runtime configurations:

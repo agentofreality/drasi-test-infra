@@ -23,6 +23,7 @@ pub mod console_dispatcher;
 pub mod dapr_dispatcher;
 pub mod drasi_server_api_dispatcher;
 pub mod drasi_server_channel_dispatcher;
+pub mod grpc_dispatcher;
 pub mod http_dispatcher;
 pub mod jsonl_file_dispatcher;
 pub mod redis_stream_disspatcher;
@@ -87,6 +88,10 @@ pub async fn create_source_change_dispatcher(
             as Box<dyn SourceChangeDispatcher + Send + Sync>),
         SourceChangeDispatcherDefinition::Http(def) => Ok(Box::new(
             http_dispatcher::HttpSourceChangeDispatcher::new(def, output_storage.clone())?,
+        )
+            as Box<dyn SourceChangeDispatcher + Send + Sync>),
+        SourceChangeDispatcherDefinition::Grpc(def) => Ok(Box::new(
+            grpc_dispatcher::GrpcSourceChangeDispatcher::new(def, output_storage.clone()).await?,
         )
             as Box<dyn SourceChangeDispatcher + Send + Sync>),
         SourceChangeDispatcherDefinition::JsonlFile(def) => Ok(Box::new(

@@ -95,6 +95,7 @@ pub struct ReactionInvocation {
 pub enum ReactionHandlerType {
     Http,
     EventGrid,
+    Grpc,
 }
 
 /// Reaction payload
@@ -241,6 +242,10 @@ pub async fn create_reaction_handler(
         }
         ReactionHandlerDefinition::EventGrid(_) => {
             unimplemented!("EventGridReactionHandler is not implemented yet")
+        }
+        ReactionHandlerDefinition::Grpc(def) => {
+            use super::reaction_handlers::grpc_reaction_handler::GrpcReactionHandler;
+            Ok(Box::new(GrpcReactionHandler::new(id, def).await?))
         }
         ReactionHandlerDefinition::DrasiServerCallback(def) => {
             use super::reaction_handlers::drasi_server_callback_handler::DrasiServerCallbackHandler;

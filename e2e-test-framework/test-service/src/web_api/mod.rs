@@ -37,6 +37,7 @@ use repo::get_test_repo_routes;
 use sources::get_sources_routes;
 use test_data_store::TestDataStore;
 use test_run_host::TestRunHost;
+use test_runs::get_test_runs_routes;
 use utoipa_swagger_ui::SwaggerUi;
 
 use crate::openapi::ApiDoc;
@@ -49,6 +50,7 @@ pub mod queries;
 pub mod reactions;
 pub mod repo;
 pub mod sources;
+pub mod test_runs;
 
 #[derive(Debug, Error)]
 pub enum TestServiceWebApiError {
@@ -191,6 +193,9 @@ pub(crate) async fn start_web_api(
     let api_router = Router::new()
         .route("/", get(get_service_info_handler))
         .nest("/test_repos", get_test_repo_routes())
+        // New hierarchical API routes
+        .merge(get_test_runs_routes())
+        // Legacy flat API routes (kept for backward compatibility)
         .nest("/test_run_host", get_drasi_servers_routes())
         .nest("/test_run_host", get_drasi_server_sources_routes())
         .nest("/test_run_host", get_drasi_server_queries_routes())
@@ -226,12 +231,12 @@ pub(crate) async fn start_web_api(
 }
 
 /// Handles graceful shutdown signals (SIGINT/Ctrl+C and SIGTERM) for the test service.
-/// 
+///
 /// This function performs the following cleanup operations:
 /// - Listens for both SIGINT (Ctrl+C) and SIGTERM signals
 /// - When a signal is received, explicitly cleans up the TestDataStore if delete_on_stop is enabled
 /// - Ensures cleanup happens before the server shuts down
-/// 
+///
 /// The cleanup is performed explicitly here rather than relying solely on Drop trait
 /// to ensure it executes reliably during signal-based shutdown.
 async fn shutdown_signal(test_data_store: Arc<TestDataStore>) {
@@ -263,7 +268,7 @@ async fn shutdown_signal(test_data_store: Arc<TestDataStore>) {
     }
 
     log::info!("Cleaning up resources...");
-    
+
     // Perform explicit cleanup of TestDataStore
     if test_data_store.should_delete_on_stop() {
         log::info!("Performing TestDataStore cleanup on shutdown signal...");
@@ -273,7 +278,7 @@ async fn shutdown_signal(test_data_store: Arc<TestDataStore>) {
             log::info!("TestDataStore cleanup completed successfully.");
         }
     }
-    
+
     log::info!("Resources cleaned up.");
 }
 

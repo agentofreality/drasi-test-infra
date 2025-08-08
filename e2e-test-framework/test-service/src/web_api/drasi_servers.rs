@@ -46,7 +46,16 @@ pub async fn create_drasi_server(
     Extension(test_run_host): Extension<Arc<TestRunHost>>,
     Json(config): Json<TestRunDrasiServerConfig>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    match test_run_host.add_test_drasi_server(config).await {
+    // Extract TestRunId from the config
+    let test_run_id = match test_data_store::test_run_storage::TestRunId::try_from(&config) {
+        Ok(id) => id,
+        Err(e) => return Err((StatusCode::BAD_REQUEST, e.to_string())),
+    };
+
+    match test_run_host
+        .add_test_drasi_server(&test_run_id, config)
+        .await
+    {
         Ok(id) => Ok(Json(DrasiServerCreatedResponse { id: id.to_string() })),
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
     }

@@ -25,6 +25,7 @@ use crate::common::OutputHandlerMessage;
 
 pub mod drasi_server_callback_handler;
 pub mod drasi_server_channel_handler;
+pub mod grpc_reaction_handler;
 pub mod http_reaction_handler;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -89,6 +90,10 @@ pub async fn create_reaction_handler(
         ReactionHandlerDefinition::EventGrid(_) => {
             unimplemented!("EventGridReactionHandler is not implemented yet")
         }
+        ReactionHandlerDefinition::Grpc(definition) => Ok(Box::new(
+            grpc_reaction_handler::GrpcReactionHandler::new(id, definition).await?,
+        )
+            as Box<dyn crate::reactions::ReactionOutputHandler + Send + Sync>),
         ReactionHandlerDefinition::DrasiServerCallback(definition) => {
             drasi_server_callback_handler::DrasiServerCallbackHandler::new(id, definition).await
         }

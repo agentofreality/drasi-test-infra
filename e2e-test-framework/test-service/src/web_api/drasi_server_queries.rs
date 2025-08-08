@@ -15,7 +15,7 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::{Path, Extension},
+    extract::{Extension, Path},
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -24,13 +24,20 @@ use test_run_host::TestRunHost;
 use utoipa::OpenApi;
 
 use crate::web_api::drasi_servers::DrasiServerError;
-use test_run_host::drasi_servers::api_models::{
-    CreateQueryRequest, UpdateQueryRequest,
-};
+use test_run_host::drasi_servers::api_models::{CreateQueryRequest, UpdateQueryRequest};
 
 #[allow(dead_code)]
 #[derive(OpenApi)]
-#[openapi(paths(list_queries, get_query, create_query, update_query, delete_query, start_query, stop_query, get_query_results))]
+#[openapi(paths(
+    list_queries,
+    get_query,
+    create_query,
+    update_query,
+    delete_query,
+    start_query,
+    stop_query,
+    get_query_results
+))]
 pub struct DrasiServerQueriesApi;
 
 /// List queries on a Drasi Server
@@ -56,7 +63,7 @@ pub async fn list_queries(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {
@@ -96,7 +103,7 @@ pub async fn get_query(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {
@@ -142,7 +149,7 @@ pub async fn create_query(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {
@@ -185,7 +192,7 @@ pub async fn update_query(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {
@@ -225,7 +232,7 @@ pub async fn delete_query(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {
@@ -268,7 +275,7 @@ pub async fn start_query(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {
@@ -311,7 +318,7 @@ pub async fn stop_query(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {
@@ -351,7 +358,7 @@ pub async fn get_query_results(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {

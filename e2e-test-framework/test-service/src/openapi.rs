@@ -18,9 +18,9 @@ use serde_json::json;
 use utoipa::{OpenApi, ToSchema};
 
 use crate::web_api::{
-    drasi_server_queries, drasi_server_reactions, drasi_server_sources,
-    drasi_servers, queries, reactions, repo, sources, DataCollectorStateResponse,
-    TestDataStoreStateResponse, TestRunHostStateResponse, TestServiceStateResponse,
+    drasi_server_queries, drasi_server_reactions, drasi_server_sources, drasi_servers, queries,
+    reactions, repo, sources, test_runs, DataCollectorStateResponse, TestDataStoreStateResponse,
+    TestRunHostStateResponse, TestServiceStateResponse,
 };
 
 /// Standard error response for all API endpoints
@@ -233,6 +233,45 @@ pub struct SourceBootstrapResponseBody {
         repo::get_test_repo_test_source_list_handler,
         repo::get_test_repo_test_source_handler,
         repo::post_test_repo_test_source_handler,
+        // Test Run endpoints
+        test_runs::create_test_run,
+        test_runs::list_test_runs,
+        test_runs::get_test_run,
+        test_runs::delete_test_run,
+        test_runs::start_test_run,
+        test_runs::stop_test_run,
+        // Test Run Source endpoints
+        test_runs::list_test_run_sources,
+        test_runs::create_test_run_source,
+        test_runs::get_test_run_source,
+        test_runs::delete_test_run_source,
+        test_runs::start_test_run_source,
+        test_runs::stop_test_run_source,
+        test_runs::pause_test_run_source,
+        test_runs::reset_test_run_source,
+        // Test Run Query endpoints
+        test_runs::list_test_run_queries,
+        test_runs::create_test_run_query,
+        test_runs::get_test_run_query,
+        test_runs::delete_test_run_query,
+        test_runs::start_test_run_query,
+        test_runs::stop_test_run_query,
+        test_runs::pause_test_run_query,
+        test_runs::reset_test_run_query,
+        // Test Run Reaction endpoints
+        test_runs::list_test_run_reactions,
+        test_runs::create_test_run_reaction,
+        test_runs::get_test_run_reaction,
+        test_runs::delete_test_run_reaction,
+        test_runs::start_test_run_reaction,
+        test_runs::stop_test_run_reaction,
+        test_runs::pause_test_run_reaction,
+        test_runs::reset_test_run_reaction,
+        // Test Run Drasi Server endpoints
+        test_runs::list_test_run_drasi_servers,
+        test_runs::create_test_run_drasi_server,
+        test_runs::get_test_run_drasi_server,
+        test_runs::delete_test_run_drasi_server,
     ),
     components(
         schemas(
@@ -293,10 +332,14 @@ pub struct SourceBootstrapResponseBody {
             test_run_host::api_models::CreateReactionRequest,
             test_run_host::api_models::UpdateReactionRequest,
             test_run_host::api_models::ReactionCreatedResponse,
+            // Test Run schemas
+            test_runs::TestRunCreatedResponse,
+            test_runs::TestRunInfo,
         )
     ),
     tags(
         (name = "service", description = "Test Service general information"),
+        (name = "test-runs", description = "Test Run management API - hierarchical structure for organizing test components"),
         (name = "drasi-servers", description = "Drasi Server management API"),
         (name = "drasi-server-sources", description = "Drasi Server Sources management API"),
         (name = "drasi-server-queries", description = "Drasi Server Queries management API"),

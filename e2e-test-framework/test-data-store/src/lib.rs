@@ -489,12 +489,12 @@ impl TestDataStore {
     }
 
     /// Asynchronously cleans up the TestDataStore by removing its root directory.
-    /// 
+    ///
     /// This method:
     /// - Checks if cleanup has already been performed to prevent double cleanup
     /// - Uses async I/O operations to avoid blocking the runtime
     /// - Sets a flag to indicate cleanup completion
-    /// 
+    ///
     /// This is the preferred cleanup method for async contexts, especially
     /// in signal handlers where blocking operations should be avoided.
     pub async fn cleanup_async(&self) -> Result<(), std::io::Error> {
@@ -520,13 +520,18 @@ impl Drop for TestDataStore {
         // Check if already cleaned up using try_lock to avoid blocking
         if let Ok(cleaned_up) = self.cleaned_up.try_lock() {
             if *cleaned_up {
-                log::debug!("TestDataStore already cleaned up in signal handler, skipping Drop cleanup");
+                log::debug!(
+                    "TestDataStore already cleaned up in signal handler, skipping Drop cleanup"
+                );
                 return;
             }
         }
 
         if self.delete_on_stop && self.root_path.exists() {
-            log::info!("Deleting TestDataStore at - {:?} (in Drop)", &self.root_path);
+            log::info!(
+                "Deleting TestDataStore at - {:?} (in Drop)",
+                &self.root_path
+            );
 
             match std::fs::remove_dir_all(&self.root_path) {
                 Ok(_) => log::info!("TestDataStore deleted successfully (in Drop)."),

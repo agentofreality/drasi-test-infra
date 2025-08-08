@@ -286,7 +286,7 @@ impl ReactionObserver {
             loggers.len(),
             loggers
         );
-        
+
         let settings = Arc::new(
             ReactionObserverSettings::new(
                 id.clone(),
@@ -532,7 +532,10 @@ impl ReactionObserver {
                 }
 
                 // Close loggers and collect results
-                log::info!("Closing {} loggers in stop() method", internal_state.loggers.len());
+                log::info!(
+                    "Closing {} loggers in stop() method",
+                    internal_state.loggers.len()
+                );
                 let mut results = Vec::new();
                 for (idx, logger) in internal_state.loggers.iter_mut().enumerate() {
                     log::debug!("Calling end_test_run on logger {} in stop()", idx);
@@ -630,7 +633,7 @@ async fn observe_reaction_handler(
                             state.stop_triggers.len(),
                             state.metrics.reaction_invocation_count
                         );
-                        
+
                         for (idx, trigger) in state.stop_triggers.iter().enumerate() {
                             match trigger.is_true(&handler_status, &state.metrics).await {
                                 Ok(true) => {
@@ -753,6 +756,7 @@ async fn handle_reaction_invocation(
             reaction_type: match invocation.handler_type {
                 ReactionHandlerType::Http => "Http".to_string(),
                 ReactionHandlerType::EventGrid => "EventGrid".to_string(),
+                ReactionHandlerType::Grpc => "Grpc".to_string(),
             },
             query_id: "unknown".to_string(), // TODO: Extract from payload if available
             request_method: invocation
@@ -793,7 +797,7 @@ async fn handle_reaction_invocation(
         handler_record.sequence,
         state.loggers.len()
     );
-    
+
     for (idx, logger) in state.loggers.iter_mut().enumerate() {
         log::trace!("Sending record to logger {}", idx);
         if let Err(e) = logger.log_handler_record(&handler_record).await {
@@ -822,7 +826,7 @@ async fn create_reaction_loggers(
         log::info!("Creating logger with config: {:?}", config);
         result.push(create_output_logger(reaction_id.clone(), config, output_storage).await?);
     }
-    
+
     log::info!("Successfully created {} loggers", result.len());
     Ok(result)
 }

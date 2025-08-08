@@ -155,7 +155,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let test_run_id = TestRunId::new("test_repo", "test_id", "test_run_001");
         let reaction_id = TestRunReactionId::new(&test_run_id, "reaction_001");
-        
+
         let reaction_storage = TestRunReactionStorage {
             id: reaction_id.clone(),
             path: temp_dir.path().to_path_buf(),
@@ -192,12 +192,13 @@ mod tests {
         assert!(result.output_folder_path.is_some());
 
         // Verify file exists
-        let metrics_path = temp_dir.path()
+        let metrics_path = temp_dir
+            .path()
             .join("outputs")
             .join("performance_metrics")
             .join("test_performance.json");
         assert!(metrics_path.exists());
-        
+
         // Verify content
         let content = std::fs::read_to_string(metrics_path).unwrap();
         assert!(content.contains("\"record_count\": 50"));

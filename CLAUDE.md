@@ -8,6 +8,18 @@ Drasi Test Infrastructure - A comprehensive testing framework for Drasi's reacti
 - **E2E Test Framework**: Rust-based testing infrastructure that simulates data sources, dispatches change events, and monitors query results
 - **Data Tools**: CLI utilities for working with GDELT and Wikidata external data sources
 
+## Recent Changes (2025-08-08)
+
+### gRPC Integration with Drasi v1 Protocol
+**Breaking Change**: The gRPC implementation has been completely replaced to use Drasi's official v1 protocol:
+- Custom proto files removed in favor of Drasi's official `drasi/v1/*.proto` definitions
+- `GrpcSourceChangeDispatcher` now acts as a client for `drasi.v1.SourceService`
+- `GrpcReactionHandler` now implements `drasi.v1.ReactionService` server
+- New required configuration fields:
+  - Source dispatcher: `source_id` 
+  - Reaction handler: `query_ids` array, `include_initial_state` flag
+- Full data model conversion between test framework and Drasi Node/Relation/Element structures
+
 ## Key Commands
 
 ### Git Hooks Setup (First Time)

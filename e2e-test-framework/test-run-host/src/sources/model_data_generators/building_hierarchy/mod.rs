@@ -658,146 +658,139 @@ impl BuildingHierarchyDataGeneratorInternalState {
         // TODO - Handle errors properly.
         let _ = join_all(futures).await;
     }
-    
+
     async fn send_initial_inserts(&mut self) -> anyhow::Result<()> {
-        log::info!("Sending initial insert events for TestRunSource {}", self.settings.id);
-        
+        log::info!(
+            "Sending initial insert events for TestRunSource {}",
+            self.settings.id
+        );
+
         // Get current time
         let now_ns = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_nanos() as u64;
-        
+
         // Get all nodes and relations from current state
         let building_graph = self.building_graph.lock().await;
         let all_labels = HashSet::new(); // Empty set to get all elements
-        
+
         // Collect all insert events
         let mut insert_events = Vec::new();
-        
+
         // Process nodes
         for change in building_graph.get_current_state(&all_labels) {
             let event = match change {
-                ModelChange::BuildingAdded(building) => {
-                    Some(SourceChangeEvent {
-                        op: "i".to_string(),
-                        reactivator_start_ns: now_ns,
-                        reactivator_end_ns: 0,
-                        payload: SourceChangeEventPayload {
-                            source: SourceChangeEventSourceInfo {
-                                db: self.settings.id.test_source_id.to_string(),
-                                lsn: self.event_seq_num,
-                                table: "node".to_string(),
-                                ts_ns: self.virtual_time_ns_current,
-                            },
-                            before: serde_json::Value::Null,
-                            after: serde_json::json!({
-                                "id": building.id,
-                                "labels": building.labels,
-                                "properties": {}
-                            }),
+                ModelChange::BuildingAdded(building) => Some(SourceChangeEvent {
+                    op: "i".to_string(),
+                    reactivator_start_ns: now_ns,
+                    reactivator_end_ns: 0,
+                    payload: SourceChangeEventPayload {
+                        source: SourceChangeEventSourceInfo {
+                            db: self.settings.id.test_source_id.to_string(),
+                            lsn: self.event_seq_num,
+                            table: "node".to_string(),
+                            ts_ns: self.virtual_time_ns_current,
                         },
-                    })
-                },
-                ModelChange::FloorAdded(floor) => {
-                    Some(SourceChangeEvent {
-                        op: "i".to_string(),
-                        reactivator_start_ns: now_ns,
-                        reactivator_end_ns: 0,
-                        payload: SourceChangeEventPayload {
-                            source: SourceChangeEventSourceInfo {
-                                db: self.settings.id.test_source_id.to_string(),
-                                lsn: self.event_seq_num,
-                                table: "node".to_string(),
-                                ts_ns: self.virtual_time_ns_current,
-                            },
-                            before: serde_json::Value::Null,
-                            after: serde_json::json!({
-                                "id": floor.id,
-                                "labels": floor.labels,
-                                "properties": {}
-                            }),
+                        before: serde_json::Value::Null,
+                        after: serde_json::json!({
+                            "id": building.id,
+                            "labels": building.labels,
+                            "properties": {}
+                        }),
+                    },
+                }),
+                ModelChange::FloorAdded(floor) => Some(SourceChangeEvent {
+                    op: "i".to_string(),
+                    reactivator_start_ns: now_ns,
+                    reactivator_end_ns: 0,
+                    payload: SourceChangeEventPayload {
+                        source: SourceChangeEventSourceInfo {
+                            db: self.settings.id.test_source_id.to_string(),
+                            lsn: self.event_seq_num,
+                            table: "node".to_string(),
+                            ts_ns: self.virtual_time_ns_current,
                         },
-                    })
-                },
-                ModelChange::RoomAdded(room) => {
-                    Some(SourceChangeEvent {
-                        op: "i".to_string(),
-                        reactivator_start_ns: now_ns,
-                        reactivator_end_ns: 0,
-                        payload: SourceChangeEventPayload {
-                            source: SourceChangeEventSourceInfo {
-                                db: self.settings.id.test_source_id.to_string(),
-                                lsn: self.event_seq_num,
-                                table: "node".to_string(),
-                                ts_ns: self.virtual_time_ns_current,
-                            },
-                            before: serde_json::Value::Null,
-                            after: serde_json::json!({
-                                "id": room.id,
-                                "labels": room.labels,
-                                "properties": room.properties
-                            }),
+                        before: serde_json::Value::Null,
+                        after: serde_json::json!({
+                            "id": floor.id,
+                            "labels": floor.labels,
+                            "properties": {}
+                        }),
+                    },
+                }),
+                ModelChange::RoomAdded(room) => Some(SourceChangeEvent {
+                    op: "i".to_string(),
+                    reactivator_start_ns: now_ns,
+                    reactivator_end_ns: 0,
+                    payload: SourceChangeEventPayload {
+                        source: SourceChangeEventSourceInfo {
+                            db: self.settings.id.test_source_id.to_string(),
+                            lsn: self.event_seq_num,
+                            table: "node".to_string(),
+                            ts_ns: self.virtual_time_ns_current,
                         },
-                    })
-                },
-                ModelChange::BuildingFloorRelationAdded(relation) => {
-                    Some(SourceChangeEvent {
-                        op: "i".to_string(),
-                        reactivator_start_ns: now_ns,
-                        reactivator_end_ns: 0,
-                        payload: SourceChangeEventPayload {
-                            source: SourceChangeEventSourceInfo {
-                                db: self.settings.id.test_source_id.to_string(),
-                                lsn: self.event_seq_num,
-                                table: "relation".to_string(),
-                                ts_ns: self.virtual_time_ns_current,
-                            },
-                            before: serde_json::Value::Null,
-                            after: serde_json::json!({
-                                "id": relation.id,
-                                "labels": relation.labels,
-                                "properties": {},
-                                "start_id": relation.building_id,
-                                "end_id": relation.floor_id
-                            }),
+                        before: serde_json::Value::Null,
+                        after: serde_json::json!({
+                            "id": room.id,
+                            "labels": room.labels,
+                            "properties": room.properties
+                        }),
+                    },
+                }),
+                ModelChange::BuildingFloorRelationAdded(relation) => Some(SourceChangeEvent {
+                    op: "i".to_string(),
+                    reactivator_start_ns: now_ns,
+                    reactivator_end_ns: 0,
+                    payload: SourceChangeEventPayload {
+                        source: SourceChangeEventSourceInfo {
+                            db: self.settings.id.test_source_id.to_string(),
+                            lsn: self.event_seq_num,
+                            table: "relation".to_string(),
+                            ts_ns: self.virtual_time_ns_current,
                         },
-                    })
-                },
-                ModelChange::FloorRoomRelationAdded(relation) => {
-                    Some(SourceChangeEvent {
-                        op: "i".to_string(),
-                        reactivator_start_ns: now_ns,
-                        reactivator_end_ns: 0,
-                        payload: SourceChangeEventPayload {
-                            source: SourceChangeEventSourceInfo {
-                                db: self.settings.id.test_source_id.to_string(),
-                                lsn: self.event_seq_num,
-                                table: "relation".to_string(),
-                                ts_ns: self.virtual_time_ns_current,
-                            },
-                            before: serde_json::Value::Null,
-                            after: serde_json::json!({
-                                "id": relation.id,
-                                "labels": relation.labels,
-                                "properties": {},
-                                "start_id": relation.floor_id,
-                                "end_id": relation.room_id
-                            }),
+                        before: serde_json::Value::Null,
+                        after: serde_json::json!({
+                            "id": relation.id,
+                            "labels": relation.labels,
+                            "properties": {},
+                            "start_id": relation.building_id,
+                            "end_id": relation.floor_id
+                        }),
+                    },
+                }),
+                ModelChange::FloorRoomRelationAdded(relation) => Some(SourceChangeEvent {
+                    op: "i".to_string(),
+                    reactivator_start_ns: now_ns,
+                    reactivator_end_ns: 0,
+                    payload: SourceChangeEventPayload {
+                        source: SourceChangeEventSourceInfo {
+                            db: self.settings.id.test_source_id.to_string(),
+                            lsn: self.event_seq_num,
+                            table: "relation".to_string(),
+                            ts_ns: self.virtual_time_ns_current,
                         },
-                    })
-                },
+                        before: serde_json::Value::Null,
+                        after: serde_json::json!({
+                            "id": relation.id,
+                            "labels": relation.labels,
+                            "properties": {},
+                            "start_id": relation.floor_id,
+                            "end_id": relation.room_id
+                        }),
+                    },
+                }),
                 _ => None,
             };
-            
+
             if let Some(event) = event {
                 insert_events.push(event);
                 self.event_seq_num += 1;
             }
         }
-        
+
         drop(building_graph);
-        
+
         // Dispatch all insert events
         if !insert_events.is_empty() {
             log::info!("Dispatching {} initial insert events", insert_events.len());
@@ -805,7 +798,7 @@ impl BuildingHierarchyDataGeneratorInternalState {
             self.dispatch_source_change_events(events_refs).await;
             self.stats.num_source_change_events += insert_events.len() as u64;
         }
-        
+
         Ok(())
     }
 
@@ -1252,14 +1245,14 @@ impl BuildingHierarchyDataGeneratorInternalState {
                 log::info!("Script Started for TestRunSource {}", self.settings.id);
 
                 self.status = SourceChangeGeneratorStatus::Running;
-                
+
                 // If send_initial_inserts is true, send insert events for all current state
                 if self.settings.send_initial_inserts {
                     if let Err(e) = self.send_initial_inserts().await {
                         log::error!("Failed to send initial inserts: {}", e);
                     }
                 }
-                
+
                 self.schedule_next_change_event().await
             }
             BuildingHierarchyDataGeneratorCommand::Step { steps, .. } => {

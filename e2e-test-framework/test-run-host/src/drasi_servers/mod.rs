@@ -17,7 +17,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use derive_more::Debug;
-use drasi_server::{ApplicationHandle, RuntimeConfig, server_core::DrasiServerCore};
+use drasi_server::{server_core::DrasiServerCore, ApplicationHandle, RuntimeConfig};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use utoipa::ToSchema;
@@ -42,11 +42,15 @@ mod tests;
 pub struct TestRunDrasiServerConfig {
     #[serde(default = "default_start_immediately")]
     pub start_immediately: bool,
-    pub test_id: String,
-    pub test_repo_id: String,
-    pub test_run_id: Option<String>,
     pub test_drasi_server_id: String,
     pub test_run_overrides: Option<TestRunDrasiServerOverrides>,
+    // Legacy fields for backward compatibility - will be set by TestRun
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub test_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub test_repo_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub test_run_id: Option<String>,
 }
 
 fn default_start_immediately() -> bool {
@@ -70,14 +74,21 @@ impl TryFrom<&TestRunDrasiServerConfig> for TestRunId {
     type Error = ParseTestRunIdError;
 
     fn try_from(value: &TestRunDrasiServerConfig) -> Result<Self, Self::Error> {
-        Ok(TestRunId::new(
-            &value.test_repo_id,
-            &value.test_id,
-            value
-                .test_run_id
-                .as_deref()
-                .unwrap_or(&chrono::Utc::now().format("%Y%m%d%H%M%S").to_string()),
-        ))
+        let test_repo_id = value.test_repo_id.as_ref().ok_or_else(|| {
+            ParseTestRunIdError::InvalidValues("test_repo_id is required".to_string())
+        })?;
+        let test_id = value
+            .test_id
+            .as_ref()
+            .ok_or_else(|| ParseTestRunIdError::InvalidValues("test_id is required".to_string()))?;
+        let default_run_id = chrono::Utc::now().format("%Y%m%d%H%M%S").to_string();
+        let test_run_id = value
+            .test_run_id
+            .as_ref()
+            .map(|s| s.to_string())
+            .unwrap_or(default_run_id);
+
+        Ok(TestRunId::new(test_repo_id, test_id, &test_run_id))
     }
 }
 
@@ -191,7 +202,6 @@ impl fmt::Display for TestRunDrasiServerState {
     }
 }
 
-
 /// Test run Drasi Server component
 #[derive(Debug)]
 pub struct TestRunDrasiServer {
@@ -261,36 +271,42 @@ impl TestRunDrasiServer {
 
                 // Determine log level (default to "info" if not specified)
                 let log_level = config.log_level.as_deref().unwrap_or("info");
-                
+
                 // Convert our configs to drasi_server configs
-                let drasi_sources: Vec<drasi_server::config::SourceConfig> = config.sources.iter().map(|s| {
-                    drasi_server::config::SourceConfig {
+                let drasi_sources: Vec<drasi_server::config::SourceConfig> = config
+                    .sources
+                    .iter()
+                    .map(|s| drasi_server::config::SourceConfig {
                         id: s.id.clone(),
                         source_type: s.source_type.clone(),
                         auto_start: s.auto_start,
                         properties: s.properties.clone(),
-                    }
-                }).collect();
-                
-                let drasi_queries: Vec<drasi_server::config::QueryConfig> = config.queries.iter().map(|q| {
-                    drasi_server::config::QueryConfig {
+                    })
+                    .collect();
+
+                let drasi_queries: Vec<drasi_server::config::QueryConfig> = config
+                    .queries
+                    .iter()
+                    .map(|q| drasi_server::config::QueryConfig {
                         id: q.id.clone(),
                         query: q.query.clone(),
                         sources: q.sources.clone(),
                         auto_start: q.auto_start,
                         properties: q.properties.clone(),
-                    }
-                }).collect();
-                
-                let drasi_reactions: Vec<drasi_server::config::ReactionConfig> = config.reactions.iter().map(|r| {
-                    drasi_server::config::ReactionConfig {
+                    })
+                    .collect();
+
+                let drasi_reactions: Vec<drasi_server::config::ReactionConfig> = config
+                    .reactions
+                    .iter()
+                    .map(|r| drasi_server::config::ReactionConfig {
                         id: r.id.clone(),
                         reaction_type: r.reaction_type.clone(),
                         queries: r.queries.clone(),
                         auto_start: r.auto_start,
                         properties: r.properties.clone(),
-                    }
-                }).collect();
+                    })
+                    .collect();
 
                 // Create RuntimeConfig for DrasiServerCore with all components
                 let runtime_config = Arc::new(RuntimeConfig {
@@ -305,10 +321,10 @@ impl TestRunDrasiServer {
                     queries: drasi_queries,
                     reactions: drasi_reactions,
                 });
-                
+
                 // Create the DrasiServerCore instance
                 let mut core = DrasiServerCore::new(runtime_config);
-                
+
                 // Log configuration summary
                 log::info!(
                     "Created DrasiServerCore with {} sources, {} queries, {} reactions pre-configured",
@@ -316,20 +332,22 @@ impl TestRunDrasiServer {
                     config.queries.len(),
                     config.reactions.len()
                 );
-                
+
                 // Initialize the core to create all components
                 log::info!("Initializing DrasiServerCore to create components...");
-                core.initialize().await
+                core.initialize()
+                    .await
                     .map_err(|e| anyhow::anyhow!("Failed to initialize DrasiServerCore: {}", e))?;
-                
+
                 // Store the core after initialization but before starting
                 let core = Arc::new(core);
-                
+
                 // Start the core to start all auto-start components
                 log::info!("Starting DrasiServerCore to start auto-start components...");
-                core.start().await
+                core.start()
+                    .await
                     .map_err(|e| anyhow::anyhow!("Failed to start DrasiServerCore: {}", e))?;
-                
+
                 // Store configured component names for validation
                 let configured_source_names: std::collections::HashSet<String> =
                     config.sources.iter().map(|s| s.id.clone()).collect();
@@ -343,34 +361,53 @@ impl TestRunDrasiServer {
                     let mut core_guard = self.drasi_core.write().await;
                     *core_guard = Some(core.clone());
                 }
-                
+
                 log::info!("DrasiServerCore initialized with {} sources, {} queries, {} reactions configured",
                     config.sources.len(), config.queries.len(), config.reactions.len());
-                
+
                 // Log the status of components
                 log::info!("DrasiServerCore ready, verifying component status...");
-                
+
                 // Verify query status
                 for query_config in &config.queries {
-                    match core.query_manager().get_query_status(query_config.id.clone()).await {
+                    match core
+                        .query_manager()
+                        .get_query_status(query_config.id.clone())
+                        .await
+                    {
                         Ok(status) => {
-                            log::info!("Query '{}' status after startup: {:?}", query_config.id, status);
+                            log::info!(
+                                "Query '{}' status after startup: {:?}",
+                                query_config.id,
+                                status
+                            );
                         }
                         Err(e) => {
-                            log::error!("Failed to get status for query '{}': {}", query_config.id, e);
+                            log::error!(
+                                "Failed to get status for query '{}': {}",
+                                query_config.id,
+                                e
+                            );
                         }
                     }
                 }
-                
+
                 // Get and store application handles from the core managers
                 {
                     let mut stored_handles = self.application_handles.write().await;
                     stored_handles.clear();
-                    
+
                     // Get handles from source manager for configured sources
                     for source_config in &config.sources {
-                        if let Some(handle) = core.source_manager().get_application_handle(&source_config.id).await {
-                            stored_handles.insert(source_config.id.clone(), ApplicationHandle::source_only(handle));
+                        if let Some(handle) = core
+                            .source_manager()
+                            .get_application_handle(&source_config.id)
+                            .await
+                        {
+                            stored_handles.insert(
+                                source_config.id.clone(),
+                                ApplicationHandle::source_only(handle),
+                            );
                             log::info!(
                                 "Stored ApplicationHandle for source '{}' on Drasi Server {}",
                                 source_config.id,
@@ -384,11 +421,18 @@ impl TestRunDrasiServer {
                             );
                         }
                     }
-                    
-                    // Get handles from reaction manager for configured reactions  
+
+                    // Get handles from reaction manager for configured reactions
                     for reaction_config in &config.reactions {
-                        if let Some(handle) = core.reaction_manager().get_application_handle(&reaction_config.id).await {
-                            stored_handles.insert(reaction_config.id.clone(), ApplicationHandle::reaction_only(handle));
+                        if let Some(handle) = core
+                            .reaction_manager()
+                            .get_application_handle(&reaction_config.id)
+                            .await
+                        {
+                            stored_handles.insert(
+                                reaction_config.id.clone(),
+                                ApplicationHandle::reaction_only(handle),
+                            );
                             log::info!(
                                 "Stored ApplicationHandle for reaction '{}' on Drasi Server {}",
                                 reaction_config.id,
@@ -402,9 +446,9 @@ impl TestRunDrasiServer {
                             );
                         }
                     }
-                    
+
                     // Note: Query manager doesn't provide application handles
-                    
+
                     log::info!(
                         "Stored {} application handles for Drasi Server {} after starting",
                         stored_handles.len(),
@@ -436,7 +480,6 @@ impl TestRunDrasiServer {
                     start_time: chrono::Utc::now(),
                 };
 
-
                 // Write server config to storage
                 let config_json = serde_json::to_value(&config)?;
                 self.storage.write_server_config(&config_json).await?;
@@ -445,11 +488,11 @@ impl TestRunDrasiServer {
                     "DrasiServerCore {} started successfully",
                     self.definition.id
                 );
-                
+
                 // Add a small delay to ensure all async initialization completes
                 log::info!("Waiting 100ms for DrasiServerCore components to fully initialize...");
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                
+
                 Ok(())
             }
             TestRunDrasiServerState::Running { .. } => {
@@ -512,7 +555,7 @@ impl TestRunDrasiServer {
     }
 
     /// Returns the API endpoint for this Drasi Server.
-    /// 
+    ///
     /// **Note**: This always returns `None` because DrasiServerCore is an embedded library
     /// that provides programmatic access to Drasi functionality, not a standalone server
     /// with HTTP endpoints. The test infrastructure wraps DrasiServerCore with its own
@@ -533,10 +576,10 @@ impl TestRunDrasiServer {
     {
         let core_guard = self.drasi_core.read().await;
         match core_guard.as_ref() {
-            Some(core) => {
-                f(core.clone()).await
-            }
-            None => Err(anyhow::anyhow!("DrasiServerCore not available - server not running")),
+            Some(core) => f(core.clone()).await,
+            None => Err(anyhow::anyhow!(
+                "DrasiServerCore not available - server not running"
+            )),
         }
     }
 

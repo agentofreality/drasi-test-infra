@@ -125,58 +125,71 @@ impl DrasiServerChannelHandler {
             );
 
             // Get the Drasi Server and application handle
-            let drasi_servers = test_run_host.drasi_servers.read().await;
-            if let Some(drasi_server) = drasi_servers.get(&settings_clone.drasi_server_id) {
-                if let Some(app_handle) = drasi_server
-                    .get_application_handle(&settings_clone.reaction_id)
-                    .await
+            let test_runs = test_run_host.test_runs.read().await;
+            if let Some(test_run) = test_runs.get(&settings_clone.drasi_server_id.test_run_id) {
+                if let Some(drasi_server) = test_run
+                    .drasi_servers
+                    .get(&settings_clone.drasi_server_id.test_drasi_server_id)
                 {
-                    if let Some(reaction_handle) = app_handle.reaction {
-                        log::info!(
+                    if let Some(app_handle) = drasi_server
+                        .get_application_handle(&settings_clone.reaction_id)
+                        .await
+                    {
+                        if let Some(reaction_handle) = app_handle.reaction {
+                            log::info!(
                             "Successfully obtained ApplicationReactionHandle for reaction '{}' on Drasi Server {}",
                             settings_clone.reaction_id, settings_clone.drasi_server_id
                         );
 
-                        // Subscribe to query results
-                        match reaction_handle.as_stream().await {
-                            Some(mut stream) => {
-                                log::info!(
+                            // Subscribe to query results
+                            match reaction_handle.as_stream().await {
+                                Some(mut stream) => {
+                                    log::info!(
                                     "Successfully subscribed to query results for reaction '{}'",
                                     settings_clone.reaction_id
                                 );
 
-                                while let Some(query_result) = stream.next().await {
-                                    // Convert QueryResult to JSON for the channel
-                                    let result_json = serde_json::json!({
-                                        "query_id": query_result.query_id,
-                                        "results": query_result.results,
-                                        "metadata": query_result.metadata,
-                                    });
+                                    while let Some(query_result) = stream.next().await {
+                                        // Convert QueryResult to JSON for the channel
+                                        let result_json = serde_json::json!({
+                                            "query_id": query_result.query_id,
+                                            "results": query_result.results,
+                                            "metadata": query_result.metadata,
+                                        });
 
-                                    if let Err(e) = tx.send(result_json).await {
-                                        log::error!(
-                                            "Failed to send query result through channel: {}",
-                                            e
-                                        );
-                                        break;
+                                        if let Err(e) = tx.send(result_json).await {
+                                            log::error!(
+                                                "Failed to send query result through channel: {}",
+                                                e
+                                            );
+                                            break;
+                                        }
                                     }
                                 }
+                                None => {
+                                    log::error!("Failed to get stream from reaction handle - receiver may have already been taken");
+                                }
                             }
-                            None => {
-                                log::error!("Failed to get stream from reaction handle - receiver may have already been taken");
-                            }
+                        } else {
+                            log::error!(
+                                "No reaction handle found in application handle for reaction '{}'",
+                                settings_clone.reaction_id
+                            );
                         }
                     } else {
-                        log::error!(
-                            "No reaction handle found in application handle for reaction '{}'",
-                            settings_clone.reaction_id
-                        );
+                        log::warn!("No application handle found for reaction '{}' - this is expected if using API dispatch", settings_clone.reaction_id);
                     }
                 } else {
-                    log::warn!("No application handle found for reaction '{}' - this is expected if using API dispatch", settings_clone.reaction_id);
+                    log::error!(
+                        "Drasi Server {} not found in test run",
+                        settings_clone.drasi_server_id.test_drasi_server_id
+                    );
                 }
             } else {
-                log::error!("Drasi Server {} not found", settings_clone.drasi_server_id);
+                log::error!(
+                    "Test run {} not found",
+                    settings_clone.drasi_server_id.test_run_id
+                );
             }
 
             log::debug!(

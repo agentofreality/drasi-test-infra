@@ -107,12 +107,14 @@ impl PerformanceMetricsOutputLogger {
         });
 
         // Create output directory
-        let output_dir = output_storage.reaction_output_path.join("performance_metrics");
+        let output_dir = output_storage
+            .reaction_output_path
+            .join("performance_metrics");
         log::info!(
             "PerformanceMetricsOutputLogger checking/creating directory: {:?}",
             output_dir
         );
-        
+
         if !output_dir.exists() {
             log::info!("Creating directory: {:?}", output_dir);
             tokio::fs::create_dir_all(&output_dir).await?;
@@ -122,7 +124,7 @@ impl PerformanceMetricsOutputLogger {
 
         // Set the output path
         let output_path = output_dir.join(&filename);
-        
+
         log::info!(
             "PerformanceMetricsOutputLogger created with output path: {:?}",
             output_path
@@ -174,12 +176,12 @@ impl OutputLogger for PerformanceMetricsOutputLogger {
     }
 
     async fn end_test_run(&mut self) -> anyhow::Result<OutputLoggerResult> {
-
         log::error!(
             "PerformanceMetricsOutputLogger: Ending test run for {} with {} records",
-            self.test_run_reaction_id, self.record_count
+            self.test_run_reaction_id,
+            self.record_count
         );
-        
+
         // Capture end time
         self.end_time_ns = Self::get_current_time_ns();
 
@@ -190,7 +192,7 @@ impl OutputLogger for PerformanceMetricsOutputLogger {
         } else {
             0
         };
-        
+
         let duration_seconds = duration_ns as f64 / 1_000_000_000.0;
         let records_per_second = if duration_seconds > 0.0 {
             self.record_count as f64 / duration_seconds
@@ -218,7 +220,7 @@ impl OutputLogger for PerformanceMetricsOutputLogger {
             metrics_json.len(),
             self.output_path
         );
-        
+
         match tokio::fs::write(&self.output_path, metrics_json.as_bytes()).await {
             Ok(_) => log::info!("Successfully wrote metrics to {:?}", self.output_path),
             Err(e) => {
@@ -228,7 +230,9 @@ impl OutputLogger for PerformanceMetricsOutputLogger {
         }
 
         // Get the parent directory for the output folder path
-        let output_folder = self.output_path.parent()
+        let output_folder = self
+            .output_path
+            .parent()
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| self.output_storage.reaction_output_path.clone());
 
@@ -244,28 +248,30 @@ impl OutputLogger for PerformanceMetricsOutputLogger {
 mod tests {
     use super::*;
     use crate::common::HandlerPayload;
-    use test_data_store::test_run_storage::{TestRunId, TestRunReactionStorage};
     use tempfile::TempDir;
+    use test_data_store::test_run_storage::{TestRunId, TestRunReactionStorage};
 
     async fn create_test_logger() -> (PerformanceMetricsOutputLogger, TempDir) {
         let temp_dir = TempDir::new().unwrap();
         let test_run_id = TestRunId::new("test_repo", "test_id", "test_run_001");
         let test_run_reaction_id = TestRunReactionId::new(&test_run_id, "reaction_001");
-        
+
         let reaction_storage = TestRunReactionStorage {
             id: test_run_reaction_id.clone(),
             path: temp_dir.path().to_path_buf(),
             reaction_output_path: temp_dir.path().join("output"),
         };
-        
+
         let _config = PerformanceMetricsOutputLoggerConfig {
             filename: Some("test_metrics.json".to_string()),
         };
-        
+
         // Create output directory
-        let output_dir = reaction_storage.reaction_output_path.join("performance_metrics");
+        let output_dir = reaction_storage
+            .reaction_output_path
+            .join("performance_metrics");
         tokio::fs::create_dir_all(&output_dir).await.unwrap();
-        
+
         let logger = PerformanceMetricsOutputLogger {
             start_time_ns: None,
             end_time_ns: 0,
@@ -274,16 +280,16 @@ mod tests {
             output_storage: reaction_storage,
             output_path: output_dir.join("test_metrics.json"),
         };
-        
+
         (logger, temp_dir)
     }
 
     #[tokio::test]
     async fn test_first_record_sets_start_time() {
         let (mut logger, _temp_dir) = create_test_logger().await;
-        
+
         assert!(logger.start_time_ns.is_none());
-        
+
         let record = HandlerRecord {
             id: "test_id".to_string(),
             sequence: 1,
@@ -295,9 +301,9 @@ mod tests {
                 reaction_output: serde_json::json!({"test": "data"}),
             },
         };
-        
+
         logger.log_handler_record(&record).await.unwrap();
-        
+
         assert!(logger.start_time_ns.is_some());
         assert_eq!(logger.record_count, 1);
     }
@@ -305,7 +311,7 @@ mod tests {
     #[tokio::test]
     async fn test_multiple_records_increment_count() {
         let (mut logger, _temp_dir) = create_test_logger().await;
-        
+
         let record = HandlerRecord {
             id: "test_id".to_string(),
             sequence: 1,
@@ -317,13 +323,13 @@ mod tests {
                 reaction_output: serde_json::json!({"test": "data"}),
             },
         };
-        
+
         for i in 0..5 {
             let mut r = record.clone();
             r.sequence = i;
             logger.log_handler_record(&r).await.unwrap();
         }
-        
+
         assert_eq!(logger.record_count, 5);
         assert!(logger.start_time_ns.is_some());
     }
@@ -331,7 +337,7 @@ mod tests {
     #[tokio::test]
     async fn test_end_test_run_produces_metrics() {
         let (mut logger, temp_dir) = create_test_logger().await;
-        
+
         // Simulate some records
         let record = HandlerRecord {
             id: "test_id".to_string(),
@@ -344,32 +350,36 @@ mod tests {
                 reaction_output: serde_json::json!({"test": "data"}),
             },
         };
-        
+
         // Add some records
         for _ in 0..100 {
             logger.log_handler_record(&record).await.unwrap();
         }
-        
+
         // Force a specific start time for predictable testing
         logger.start_time_ns = Some(1_000_000_000);
-        
+
         // Sleep briefly to ensure some time passes
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-        
+
         let result = logger.end_test_run().await.unwrap();
-        
+
         assert!(result.has_output);
         assert_eq!(result.logger_name, "PerformanceMetrics");
         assert!(result.output_folder_path.is_some());
-        
+
         // Verify the metrics file was created
-        let metrics_path = temp_dir.path().join("output").join("performance_metrics").join("test_metrics.json");
+        let metrics_path = temp_dir
+            .path()
+            .join("output")
+            .join("performance_metrics")
+            .join("test_metrics.json");
         assert!(metrics_path.exists());
-        
+
         // Read and verify metrics content
         let metrics_content = std::fs::read_to_string(metrics_path).unwrap();
         let metrics: PerformanceMetrics = serde_json::from_str(&metrics_content).unwrap();
-        
+
         assert_eq!(metrics.record_count, 100);
         assert!(metrics.duration_ns > 0);
         assert!(metrics.records_per_second > 0.0);
@@ -378,12 +388,12 @@ mod tests {
     #[tokio::test]
     async fn test_no_records_case() {
         let (mut logger, _temp_dir) = create_test_logger().await;
-        
+
         let result = logger.end_test_run().await.unwrap();
-        
+
         assert!(result.has_output);
         assert_eq!(result.logger_name, "PerformanceMetrics");
-        
+
         // Even with no records, metrics should be written
         assert_eq!(logger.record_count, 0);
     }

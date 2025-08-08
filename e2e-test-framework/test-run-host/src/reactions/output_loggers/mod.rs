@@ -19,7 +19,9 @@ use serde::{Deserialize, Serialize};
 
 pub use console_logger::{ConsoleOutputLogger, ConsoleOutputLoggerConfig};
 pub use jsonl_file_logger::{JsonlFileOutputLogger, JsonlFileOutputLoggerConfig};
-pub use performance_metrics_logger::{PerformanceMetricsOutputLogger, PerformanceMetricsOutputLoggerConfig};
+pub use performance_metrics_logger::{
+    PerformanceMetricsOutputLogger, PerformanceMetricsOutputLoggerConfig,
+};
 use test_data_store::test_run_storage::{TestRunReactionId, TestRunReactionStorage};
 
 use crate::common::HandlerRecord;
@@ -79,7 +81,11 @@ pub async fn create_output_logger(
     config: &OutputLoggerConfig,
     output_storage: &TestRunReactionStorage,
 ) -> anyhow::Result<Box<dyn OutputLogger + Send + Sync>> {
-    log::info!("create_output_logger called for {} with config: {:?}", test_run_reaction_id, config);
+    log::info!(
+        "create_output_logger called for {} with config: {:?}",
+        test_run_reaction_id,
+        config
+    );
     match config {
         OutputLoggerConfig::Console(cfg) => ConsoleOutputLogger::new(test_run_reaction_id, cfg),
         OutputLoggerConfig::JsonlFile(cfg) => {

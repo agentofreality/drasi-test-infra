@@ -133,8 +133,8 @@ mod tests {
 
         let run_config = TestRunDrasiServerConfig {
             start_immediately: true,
-            test_id: "integration_test".to_string(),
-            test_repo_id: "test_repo".to_string(),
+            test_id: Some("integration_test".to_string()),
+            test_repo_id: Some("test_repo".to_string()),
             test_run_id: Some("test_run_001".to_string()),
             test_drasi_server_id: "test-server".to_string(),
             test_run_overrides: None,
@@ -223,8 +223,8 @@ mod tests {
 
         let run_config = TestRunDrasiServerConfig {
             start_immediately: false,
-            test_id: "test".to_string(),
-            test_repo_id: "test_repo".to_string(),
+            test_id: Some("test".to_string()),
+            test_repo_id: Some("test_repo".to_string()),
             test_run_id: None,
             test_drasi_server_id: "test-server".to_string(),
             test_run_overrides: None,
@@ -261,8 +261,8 @@ mod tests {
 
         let run_config = TestRunDrasiServerConfig {
             start_immediately: false,
-            test_id: "test".to_string(),
-            test_repo_id: "test_repo".to_string(),
+            test_id: Some("test".to_string()),
+            test_repo_id: Some("test_repo".to_string()),
             test_run_id: None,
             test_drasi_server_id: "test-server".to_string(),
             test_run_overrides: None,
@@ -299,8 +299,8 @@ mod tests {
 
         let run_config = TestRunDrasiServerConfig {
             start_immediately: false,
-            test_id: "test".to_string(),
-            test_repo_id: "test_repo".to_string(),
+            test_id: Some("test".to_string()),
+            test_repo_id: Some("test_repo".to_string()),
             test_run_id: None,
             test_drasi_server_id: "test-server".to_string(),
             test_run_overrides: Some(TestRunDrasiServerOverrides {

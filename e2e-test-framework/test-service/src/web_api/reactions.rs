@@ -246,7 +246,17 @@ pub async fn post_reaction_handler(
 
     let reaction_config = body.0;
 
-    match test_run_host.add_test_reaction(reaction_config).await {
+    // Extract TestRunId from the config
+    let test_run_id = match test_data_store::test_run_storage::TestRunId::try_from(&reaction_config)
+    {
+        Ok(id) => id,
+        Err(e) => return Err(TestServiceWebApiError::AnyhowError(anyhow::anyhow!(e))),
+    };
+
+    match test_run_host
+        .add_test_reaction(&test_run_id, reaction_config)
+        .await
+    {
         Ok(id) => match test_run_host.get_test_reaction_state(&id.to_string()).await {
             Ok(reaction) => Ok(Json(reaction).into_response()),
             Err(_) => Err(TestServiceWebApiError::NotFound(

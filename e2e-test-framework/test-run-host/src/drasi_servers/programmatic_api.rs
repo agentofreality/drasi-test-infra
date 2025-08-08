@@ -31,7 +31,7 @@ impl TestRunDrasiServer {
     pub async fn list_sources(&self) -> Result<Vec<SourceInfo>> {
         self.with_core(|core| async move {
             let sources = core.source_manager().list_sources().await;
-            
+
             let mut source_infos = Vec::new();
             for (name, status) in sources {
                 // We need to get the full source config to get the type
@@ -43,21 +43,24 @@ impl TestRunDrasiServer {
                     });
                 }
             }
-            
+
             Ok(source_infos)
-        }).await
+        })
+        .await
     }
 
     pub async fn get_source(&self, source_id: &str) -> Result<SourceDetails> {
         let source_id = source_id.to_string();
         self.with_core(|core| async move {
             let source_runtime = core.source_manager().get_source(source_id.clone()).await?;
-            
+
             // Get the config to find auto_start
-            let config = core.source_manager().get_source_config(&source_id)
+            let config = core
+                .source_manager()
+                .get_source_config(&source_id)
                 .await
                 .ok_or_else(|| anyhow!("Source config not found"))?;
-            
+
             Ok(SourceDetails {
                 name: source_runtime.id,
                 source_type: source_runtime.source_type,
@@ -65,7 +68,8 @@ impl TestRunDrasiServer {
                 auto_start: config.auto_start,
                 properties: serde_json::to_value(source_runtime.properties)?,
             })
-        }).await
+        })
+        .await
     }
 
     pub async fn create_source(
@@ -86,7 +90,8 @@ impl TestRunDrasiServer {
                 name: request.name.clone(),
                 message: format!("Source '{}' created successfully", request.name),
             })
-        }).await
+        })
+        .await
     }
 
     pub async fn update_source(
@@ -96,7 +101,7 @@ impl TestRunDrasiServer {
     ) -> Result<SourceDetails> {
         let source_id_str = source_id.to_string();
         let existing = self.get_source(&source_id_str).await?;
-        
+
         let source_id_clone = source_id_str.clone();
         self.with_core(|core| async move {
             let config = SourceConfig {
@@ -111,40 +116,48 @@ impl TestRunDrasiServer {
                 },
             };
 
-            core.source_manager().update_source(source_id_clone, config).await?;
+            core.source_manager()
+                .update_source(source_id_clone, config)
+                .await?;
             Ok(())
-        }).await?;
-        
+        })
+        .await?;
+
         self.get_source(&source_id_str).await
     }
 
     pub async fn delete_source(&self, source_id: &str) -> Result<()> {
         let source_id = source_id.to_string();
-        self.with_core(|core| async move {
-            core.source_manager().delete_source(source_id).await
-        }).await
+        self.with_core(|core| async move { core.source_manager().delete_source(source_id).await })
+            .await
     }
 
     pub async fn start_source(&self, source_id: &str) -> Result<StatusResponse> {
         let source_id_str = source_id.to_string();
         self.with_core(|core| async move {
-            core.source_manager().start_source(source_id_str.clone()).await?;
+            core.source_manager()
+                .start_source(source_id_str.clone())
+                .await?;
             Ok(StatusResponse {
                 status: "started".to_string(),
                 message: Some(format!("Source '{}' started successfully", source_id_str)),
             })
-        }).await
+        })
+        .await
     }
 
     pub async fn stop_source(&self, source_id: &str) -> Result<StatusResponse> {
         let source_id_str = source_id.to_string();
         self.with_core(|core| async move {
-            core.source_manager().stop_source(source_id_str.clone()).await?;
+            core.source_manager()
+                .stop_source(source_id_str.clone())
+                .await?;
             Ok(StatusResponse {
                 status: "stopped".to_string(),
                 message: Some(format!("Source '{}' stopped successfully", source_id_str)),
             })
-        }).await
+        })
+        .await
     }
 
     // ===== Queries Management =====
@@ -152,7 +165,7 @@ impl TestRunDrasiServer {
     pub async fn list_queries(&self) -> Result<Vec<QueryInfo>> {
         self.with_core(|core| async move {
             let queries = core.query_manager().list_queries().await;
-            
+
             let mut query_infos = Vec::new();
             for (name, status) in queries {
                 // We need to get the full query config to get sources
@@ -164,32 +177,38 @@ impl TestRunDrasiServer {
                     });
                 }
             }
-            
+
             Ok(query_infos)
-        }).await
+        })
+        .await
     }
 
     pub async fn get_query(&self, query_id: &str) -> Result<QueryDetails> {
         let query_id = query_id.to_string();
         self.with_core(|core| async move {
             let query_runtime = core.query_manager().get_query(query_id.clone()).await?;
-            
+
             // Get the config to find auto_start
-            let config = core.query_manager().get_query_config(&query_id)
+            let config = core
+                .query_manager()
+                .get_query_config(&query_id)
                 .await
                 .ok_or_else(|| anyhow!("Query config not found"))?;
-            
+
             Ok(QueryDetails {
                 name: query_runtime.id,
                 query: query_runtime.query,
                 sources: query_runtime.sources,
                 status: convert_component_status(query_runtime.status),
                 auto_start: config.auto_start,
-                profiling: query_runtime.properties.get("profiling")
+                profiling: query_runtime
+                    .properties
+                    .get("profiling")
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false),
             })
-        }).await
+        })
+        .await
     }
 
     pub async fn create_query(&self, request: CreateQueryRequest) -> Result<QueryCreatedResponse> {
@@ -213,7 +232,8 @@ impl TestRunDrasiServer {
                 name: request.name.clone(),
                 message: format!("Query '{}' created successfully", request.name),
             })
-        }).await
+        })
+        .await
     }
 
     pub async fn update_query(
@@ -223,7 +243,7 @@ impl TestRunDrasiServer {
     ) -> Result<QueryDetails> {
         let query_id_str = query_id.to_string();
         let existing = self.get_query(&query_id_str).await?;
-        
+
         let query_id_clone = query_id_str.clone();
         self.with_core(|core| async move {
             let mut properties = HashMap::new();
@@ -239,18 +259,20 @@ impl TestRunDrasiServer {
                 properties,
             };
 
-            core.query_manager().update_query(query_id_clone, config).await?;
+            core.query_manager()
+                .update_query(query_id_clone, config)
+                .await?;
             Ok(())
-        }).await?;
-        
+        })
+        .await?;
+
         self.get_query(&query_id_str).await
     }
 
     pub async fn delete_query(&self, query_id: &str) -> Result<()> {
         let query_id = query_id.to_string();
-        self.with_core(|core| async move {
-            core.query_manager().delete_query(query_id).await
-        }).await
+        self.with_core(|core| async move { core.query_manager().delete_query(query_id).await })
+            .await
     }
 
     pub async fn start_query(&self, query_id: &str) -> Result<StatusResponse> {
@@ -259,26 +281,33 @@ impl TestRunDrasiServer {
             // Note: Starting a query through the manager requires a SourceChangeReceiver
             // which is typically managed internally by DrasiServerCore
             // For now, return an error indicating this operation is not supported
-            Err(anyhow!("Starting queries is managed automatically by DrasiServerCore"))
-        }).await
+            Err(anyhow!(
+                "Starting queries is managed automatically by DrasiServerCore"
+            ))
+        })
+        .await
     }
 
     pub async fn stop_query(&self, query_id: &str) -> Result<StatusResponse> {
         let query_id_str = query_id.to_string();
         self.with_core(|core| async move {
-            core.query_manager().stop_query(query_id_str.clone()).await?;
+            core.query_manager()
+                .stop_query(query_id_str.clone())
+                .await?;
             Ok(StatusResponse {
                 status: "stopped".to_string(),
                 message: Some(format!("Query '{}' stopped successfully", query_id_str)),
             })
-        }).await
+        })
+        .await
     }
     pub async fn get_query_results(&self, query_id: &str) -> Result<serde_json::Value> {
         let query_id = query_id.to_string();
         self.with_core(|core| async move {
             let results = core.query_manager().get_query_results(&query_id).await?;
             Ok(serde_json::Value::Array(results))
-        }).await
+        })
+        .await
     }
 
     // ===== Reactions Management =====
@@ -286,7 +315,7 @@ impl TestRunDrasiServer {
     pub async fn list_reactions(&self) -> Result<Vec<ReactionInfo>> {
         self.with_core(|core| async move {
             let reactions = core.reaction_manager().list_reactions().await;
-            
+
             let mut reaction_infos = Vec::new();
             for (name, status) in reactions {
                 // We need to get the full reaction config to get type and queries
@@ -299,21 +328,27 @@ impl TestRunDrasiServer {
                     });
                 }
             }
-            
+
             Ok(reaction_infos)
-        }).await
+        })
+        .await
     }
 
     pub async fn get_reaction(&self, reaction_id: &str) -> Result<ReactionDetails> {
         let reaction_id = reaction_id.to_string();
         self.with_core(|core| async move {
-            let reaction_runtime = core.reaction_manager().get_reaction(reaction_id.clone()).await?;
-            
+            let reaction_runtime = core
+                .reaction_manager()
+                .get_reaction(reaction_id.clone())
+                .await?;
+
             // Get the config to find auto_start
-            let config = core.reaction_manager().get_reaction_config(&reaction_id)
+            let config = core
+                .reaction_manager()
+                .get_reaction_config(&reaction_id)
                 .await
                 .ok_or_else(|| anyhow!("Reaction config not found"))?;
-            
+
             Ok(ReactionDetails {
                 name: reaction_runtime.id,
                 reaction_type: reaction_runtime.reaction_type,
@@ -322,7 +357,8 @@ impl TestRunDrasiServer {
                 auto_start: config.auto_start,
                 properties: serde_json::to_value(reaction_runtime.properties)?,
             })
-        }).await
+        })
+        .await
     }
 
     pub async fn create_reaction(
@@ -344,7 +380,8 @@ impl TestRunDrasiServer {
                 name: request.name.clone(),
                 message: format!("Reaction '{}' created successfully", request.name),
             })
-        }).await
+        })
+        .await
     }
 
     pub async fn update_reaction(
@@ -354,7 +391,7 @@ impl TestRunDrasiServer {
     ) -> Result<ReactionDetails> {
         let reaction_id_str = reaction_id.to_string();
         let existing = self.get_reaction(&reaction_id_str).await?;
-        
+
         let reaction_id_clone = reaction_id_str.clone();
         self.with_core(|core| async move {
             let config = ReactionConfig {
@@ -370,18 +407,22 @@ impl TestRunDrasiServer {
                 },
             };
 
-            core.reaction_manager().update_reaction(reaction_id_clone, config).await?;
+            core.reaction_manager()
+                .update_reaction(reaction_id_clone, config)
+                .await?;
             Ok(())
-        }).await?;
-        
+        })
+        .await?;
+
         self.get_reaction(&reaction_id_str).await
     }
 
     pub async fn delete_reaction(&self, reaction_id: &str) -> Result<()> {
         let reaction_id = reaction_id.to_string();
-        self.with_core(|core| async move {
-            core.reaction_manager().delete_reaction(reaction_id).await
-        }).await
+        self.with_core(
+            |core| async move { core.reaction_manager().delete_reaction(reaction_id).await },
+        )
+        .await
     }
 
     pub async fn start_reaction(&self, reaction_id: &str) -> Result<StatusResponse> {
@@ -390,19 +431,28 @@ impl TestRunDrasiServer {
             // Note: Starting a reaction through the manager requires a QueryResultReceiver
             // which is typically managed internally by DrasiServerCore
             // For now, return an error indicating this operation is not supported
-            Err(anyhow!("Starting reactions is managed automatically by DrasiServerCore"))
-        }).await
+            Err(anyhow!(
+                "Starting reactions is managed automatically by DrasiServerCore"
+            ))
+        })
+        .await
     }
 
     pub async fn stop_reaction(&self, reaction_id: &str) -> Result<StatusResponse> {
         let reaction_id_str = reaction_id.to_string();
         self.with_core(|core| async move {
-            core.reaction_manager().stop_reaction(reaction_id_str.clone()).await?;
+            core.reaction_manager()
+                .stop_reaction(reaction_id_str.clone())
+                .await?;
             Ok(StatusResponse {
                 status: "stopped".to_string(),
-                message: Some(format!("Reaction '{}' stopped successfully", reaction_id_str)),
+                message: Some(format!(
+                    "Reaction '{}' stopped successfully",
+                    reaction_id_str
+                )),
             })
-        }).await
+        })
+        .await
     }
 }
 

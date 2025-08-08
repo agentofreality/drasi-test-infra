@@ -24,13 +24,19 @@ use test_run_host::TestRunHost;
 use utoipa::OpenApi;
 
 use crate::web_api::drasi_servers::DrasiServerError;
-use test_run_host::drasi_servers::api_models::{
-    CreateSourceRequest, UpdateSourceRequest,
-};
+use test_run_host::drasi_servers::api_models::{CreateSourceRequest, UpdateSourceRequest};
 
 #[allow(dead_code)]
 #[derive(OpenApi)]
-#[openapi(paths(list_sources, get_source, create_source, update_source, delete_source, start_source, stop_source))]
+#[openapi(paths(
+    list_sources,
+    get_source,
+    create_source,
+    update_source,
+    delete_source,
+    start_source,
+    stop_source
+))]
 pub struct DrasiServerSourcesApi;
 
 /// List all sources on a Drasi Server
@@ -56,7 +62,7 @@ pub async fn list_sources(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {
@@ -96,7 +102,7 @@ pub async fn get_source(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {
@@ -145,7 +151,7 @@ pub async fn create_source(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {
@@ -190,7 +196,7 @@ pub async fn update_source(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {
@@ -230,7 +236,7 @@ pub async fn delete_source(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {
@@ -273,7 +279,7 @@ pub async fn start_source(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {
@@ -316,7 +322,7 @@ pub async fn stop_source(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            
+
             Err((
                 status,
                 Json(DrasiServerError {

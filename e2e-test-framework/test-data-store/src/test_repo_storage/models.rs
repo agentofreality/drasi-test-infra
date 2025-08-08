@@ -362,6 +362,7 @@ pub enum SourceChangeDispatcherDefinition {
     Console(ConsoleSourceChangeDispatcherDefinition),
     Dapr(DaprSourceChangeDispatcherDefinition),
     Http(HttpSourceChangeDispatcherDefinition),
+    Grpc(GrpcSourceChangeDispatcherDefinition),
     JsonlFile(JsonlFileSourceChangeDispatcherDefinition),
     RedisStream(RedisStreamSourceChangeDispatcherDefinition),
     DrasiServerApi(DrasiServerApiSourceChangeDispatcherDefinition),
@@ -400,6 +401,16 @@ pub struct HttpSourceChangeDispatcherDefinition {
     pub endpoint: Option<String>,
     pub timeout_seconds: Option<u64>,
     pub batch_events: Option<bool>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GrpcSourceChangeDispatcherDefinition {
+    pub host: String,
+    pub port: u16,
+    pub timeout_seconds: Option<u64>,
+    pub batch_events: Option<bool>,
+    pub tls: Option<bool>,
+    pub source_id: String, // Required for Drasi SourceService
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -480,6 +491,7 @@ pub struct RecordCountStopTriggerDefinition {
 pub enum ReactionHandlerDefinition {
     Http(HttpReactionHandlerDefinition),
     EventGrid(EventGridReactionHandlerDefinition),
+    Grpc(GrpcReactionHandlerDefinition),
     DrasiServerCallback(DrasiServerCallbackReactionHandlerDefinition),
     DrasiServerChannel(DrasiServerChannelReactionHandlerDefinition),
 }
@@ -496,6 +508,15 @@ pub struct HttpReactionHandlerDefinition {
 pub struct EventGridReactionHandlerDefinition {
     pub endpoint: Option<String>,
     pub access_key: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GrpcReactionHandlerDefinition {
+    pub host: Option<String>,
+    pub port: Option<u16>,
+    pub correlation_metadata_key: Option<String>,
+    pub query_ids: Vec<String>,              // Query IDs to subscribe to
+    pub include_initial_state: Option<bool>, // Whether to receive initial state
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -123,25 +123,36 @@ pub struct TestRunSourceChangeGeneratorOverrides {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TestRunSourceConfig {
     pub start_mode: Option<SourceStartMode>,
-    pub test_id: String,
-    pub test_repo_id: String,
-    pub test_run_id: Option<String>,
-    pub test_run_overrides: Option<TestRunSourceOverrides>,
     pub test_source_id: String,
+    pub test_run_overrides: Option<TestRunSourceOverrides>,
+    // Legacy fields for backward compatibility - will be set by TestRun
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub test_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub test_repo_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub test_run_id: Option<String>,
 }
 
 impl TryFrom<&TestRunSourceConfig> for TestRunId {
     type Error = ParseTestRunIdError;
 
     fn try_from(value: &TestRunSourceConfig) -> Result<Self, Self::Error> {
-        Ok(match value.test_run_id.as_deref() {
-            Some(test_run_id) => TestRunId::new(&value.test_repo_id, &value.test_id, test_run_id),
-            None => TestRunId::new(
-                &value.test_repo_id,
-                &value.test_id,
-                &chrono::Utc::now().format("%Y%m%d%H%M%S").to_string(),
-            ),
-        })
+        let test_repo_id = value.test_repo_id.as_ref().ok_or_else(|| {
+            ParseTestRunIdError::InvalidValues("test_repo_id is required".to_string())
+        })?;
+        let test_id = value
+            .test_id
+            .as_ref()
+            .ok_or_else(|| ParseTestRunIdError::InvalidValues("test_id is required".to_string()))?;
+        let default_run_id = chrono::Utc::now().format("%Y%m%d%H%M%S").to_string();
+        let test_run_id = value
+            .test_run_id
+            .as_ref()
+            .map(|s| s.to_string())
+            .unwrap_or(default_run_id);
+
+        Ok(TestRunId::new(test_repo_id, test_id, &test_run_id))
     }
 }
 

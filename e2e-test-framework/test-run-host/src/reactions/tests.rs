@@ -238,10 +238,10 @@ mod tests {
             reaction_observer::ReactionObserverStatus::Stopped
         );
         assert!(state.start_immediately);
-        
+
         // Manually start the reaction to test it can be started
         reaction.start_reaction_observer().await?;
-        
+
         // Now it should be running
         let state = reaction.get_state().await?;
         assert_eq!(
