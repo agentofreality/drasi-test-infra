@@ -1,3 +1,0 @@
--e [32m
-Running the E2E Test Service with Internal Drasi Server...[0m
-error: manifest path `./test-service/Cargo.toml` does not exist

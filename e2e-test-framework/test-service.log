@@ -1,9 +1,0 @@
-[2025-07-23T04:38:23Z ERROR test_run_host::queries::result_stream_handlers::redis_result_stream_handler] Connection Error: Connection refused (os error 61)
-[2025-07-23T04:38:23Z ERROR test_run_host::queries::query_result_observer] QueryResultObserver transitioned to an Error state. Received error: Error in ResultStreamHandler stream: RedisError(Connection refused (os error 61))
-HTTP dispatcher created - URL: http://localhost:9000/sources/facilities-db/events, Batch: false
-HTTP dispatcher: Dispatching 1 events to http://localhost:9000/sources/facilities-db/events
-HTTP dispatcher: Dispatching 1 events to http://localhost:9000/sources/facilities-db/events
-HTTP dispatcher: Dispatching 1 events to http://localhost:9000/sources/facilities-db/events
-HTTP dispatcher: Dispatching 1 events to http://localhost:9000/sources/facilities-db/events
-HTTP dispatcher: Dispatching 1 events to http://localhost:9000/sources/facilities-db/events
-[2025-07-23T04:41:09Z ERROR test_run_host::queries::query_result_observer] Command channel closed. Exiting QueryResultObserver: QueryResultObserverInternalState { error_messages: Some("Error in ResultStreamHandler stream: RedisError(Connection refused (os error 61))"), status: Error, metrics: QueryResultObserverMetrics { observer_create_time_ns: 1753245503475309000, observer_start_time_ns: 1753245503477048000, observer_stop_time_ns: 1753245503477200000, result_stream_bootstrap_record_count: 0, result_stream_bootstrap_record_first_ns: 0, result_stream_bootstrap_record_last_ns: 0, result_stream_change_record_count: 0, result_stream_change_record_first_ns: 0, result_stream_change_record_last_ns: 0, result_stream_record_seq: 0, control_stream_record_count: 0, control_stream_bootstrap_start_time_ns: 0, control_stream_bootstrap_complete_time_ns: 0, control_stream_running_time_ns: 0, control_stream_stop_time_ns: 0, control_stream_delete_time_ns: 0 } }
