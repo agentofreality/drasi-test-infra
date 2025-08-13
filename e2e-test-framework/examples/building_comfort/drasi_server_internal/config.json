@@ -39,7 +39,7 @@
                             "queries": [
                             {
                                 "id": "all-rooms",
-                                "query": "MATCH (r:Room) RETURN elementId(r) AS RoomId, 50 + (r.temperature - 72) + (r.humidity - 42) + (r.co2 / 25) AS ComfortLevel",
+                                "query": "MATCH (r:Room) RETURN elementId(r) AS RoomId, r.temperature, r.humidity, r.co2",
                                 "sources": ["facilities-db"],
                                 "auto_start": true,
                                 "properties": {}
@@ -82,30 +82,30 @@
                             "floor_count": [1, 0],
                             "room_count": [1, 0],                   
                             "room_sensors": [
-                            {
-                                "kind": "NormalFloat",
-                                "id": "temperature",
-                                "momentum_init": [5, 1, 0.5],
-                                "value_change": [1, 0.5],
-                                "value_init": [72, 5],
-                                "value_range": [20, 110]
-                            },
-                            {
-                                "kind": "NormalFloat",
-                                "id": "co2",
-                                "momentum_init": [10, 1, 0.5],
-                                "value_change": [20, 5.0],
-                                "value_init": [100, 10],
-                                "value_range": [50, 1000]
-                            },
-                            {
-                                "kind": "NormalFloat",
-                                "id": "humidity",
-                                "momentum_init": [5, 1, 0.5],
-                                "value_change": [1, 0.5],
-                                "value_init": [42, 3],
-                                "value_range": [0, 100]
-                            }
+                                {
+                                    "kind": "NormalFloat",
+                                    "id": "temperature",
+                                    "momentum_init": [5, 1, 0.5],
+                                    "value_change": [1, 0],
+                                    "value_init": [5000, 0],
+                                    "value_range": [0, 10000]
+                                },
+                                {
+                                    "kind": "NormalFloat",
+                                    "id": "co2",
+                                    "momentum_init": [10, 1, 0.5],
+                                    "value_change": [1, 0],
+                                    "value_init": [5000, 0],
+                                    "value_range": [0, 10000]
+                                },
+                                {
+                                    "kind": "NormalFloat",
+                                    "id": "humidity",
+                                    "momentum_init": [5, 1, 0.5],
+                                    "value_change": [1, 0],
+                                    "value_init": [5000, 0],
+                                    "value_range": [0, 10000]
+                                }
                             ]
                         },
                         "subscribers": []
@@ -123,7 +123,7 @@
                         "stop_triggers": [
                             {
                             "kind": "RecordCount",
-                            "record_count": 85000
+                            "record_count": 100000
                             }
                         ]
                         }
@@ -151,6 +151,10 @@
                       "test_reaction_id": "building-comfort",
                       "start_immediately": true,
                       "output_loggers": [
+                          {
+                              "kind": "JsonlFile",
+                              "max_lines_per_file": 15000
+                          },
                           {
                               "kind": "PerformanceMetrics"
                           }

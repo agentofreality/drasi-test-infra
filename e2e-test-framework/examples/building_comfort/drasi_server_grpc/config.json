@@ -45,30 +45,30 @@
                             "floor_count": [1, 0],
                             "room_count": [1, 0],                   
                             "room_sensors": [
-                              {
-                                "kind": "NormalFloat",
-                                "id": "temperature",
-                                "momentum_init": [5, 1, 0.5],
-                                "value_change": [1, 0.5],
-                                "value_init": [72, 5],
-                                "value_range": [20, 110]
-                              },
-                              {
-                                "kind": "NormalFloat",
-                                "id": "co2",
-                                "momentum_init": [10, 1, 0.5],
-                                "value_change": [20, 5.0],
-                                "value_init": [100, 10],
-                                "value_range": [50, 1000]
-                              },
-                              {
-                                "kind": "NormalFloat",
-                                "id": "humidity",
-                                "momentum_init": [5, 1, 0.5],
-                                "value_change": [1, 0.5],
-                                "value_init": [42, 3],
-                                "value_range": [0, 100]
-                              }
+                                {
+                                    "kind": "NormalFloat",
+                                    "id": "temperature",
+                                    "momentum_init": [5, 1, 0.5],
+                                    "value_change": [1, 0],
+                                    "value_init": [5000, 0],
+                                    "value_range": [0, 10000]
+                                },
+                                {
+                                    "kind": "NormalFloat",
+                                    "id": "co2",
+                                    "momentum_init": [10, 1, 0.5],
+                                    "value_change": [1, 0],
+                                    "value_init": [5000, 0],
+                                    "value_range": [0, 10000]
+                                },
+                                {
+                                    "kind": "NormalFloat",
+                                    "id": "humidity",
+                                    "momentum_init": [5, 1, 0.5],
+                                    "value_change": [1, 0],
+                                    "value_init": [5000, 0],
+                                    "value_range": [0, 10000]
+                                }
                             ]
                           },
                           "subscribers": [
@@ -90,7 +90,7 @@
                           "stop_triggers": [
                             {
                               "kind": "RecordCount",
-                              "record_count": 89678
+                              "record_count": 100000
                             }
                           ]
                         }
