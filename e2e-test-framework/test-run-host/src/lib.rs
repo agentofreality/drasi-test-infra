@@ -241,19 +241,6 @@ impl TestRunHost {
                 source.set_test_run_host(self_ref.clone());
             }
 
-            // Start auto-start sources
-            for (source_id, source) in test_run.sources.iter() {
-                let state = source.get_state().await?;
-                if state.start_mode == SourceStartMode::Auto {
-                    log::info!(
-                        "Auto-starting source {} in test run {:?}",
-                        source_id,
-                        test_run_id
-                    );
-                    source.start_source_change_generator().await?;
-                }
-            }
-
             // Set TestRunHost on all reactions (for handlers that need it)
             for (reaction_id, reaction) in test_run.reactions.iter() {
                 log::debug!(
@@ -264,15 +251,34 @@ impl TestRunHost {
                 reaction.set_test_run_host(self_ref.clone());
             }
 
-            // Start reactions with start_immediately
+            // Start reactions with start_immediately BEFORE sources
             for (reaction_id, reaction) in test_run.reactions.iter() {
                 if reaction.start_immediately {
                     log::info!(
-                        "Auto-starting reaction {} in test run {:?}",
+                        "Auto-starting reaction {} in test run {:?} (before sources)",
                         reaction_id,
                         test_run_id
                     );
                     reaction.start_reaction_observer().await?;
+                }
+            }
+
+            // Give reaction handlers time to fully initialize and start listening
+            if test_run.reactions.values().any(|r| r.start_immediately) {
+                log::info!("Waiting 2 seconds for reaction handlers to initialize...");
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+            }
+
+            // Start auto-start sources AFTER reactions are ready
+            for (source_id, source) in test_run.sources.iter() {
+                let state = source.get_state().await?;
+                if state.start_mode == SourceStartMode::Auto {
+                    log::info!(
+                        "Auto-starting source {} in test run {:?} (after reactions are ready)",
+                        source_id,
+                        test_run_id
+                    );
+                    source.start_source_change_generator().await?;
                 }
             }
         }

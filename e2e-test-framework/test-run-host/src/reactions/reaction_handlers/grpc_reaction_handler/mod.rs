@@ -23,7 +23,7 @@ use tokio::sync::{
     Notify, RwLock,
 };
 use tonic::{transport::Server, Request, Response, Status};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, trace};
 
 use crate::grpc_converters::{convert_from_drasi_query_result, drasi};
 use crate::reactions::reaction_output_handler::{
@@ -127,11 +127,14 @@ impl ReactionService for GrpcServerImpl {
         &self,
         request: Request<ProcessResultsRequest>,
     ) -> Result<Response<ProcessResultsResponse>, Status> {
+        trace!("Received ProcessResults request");
         let req = request.into_inner();
 
         if let Some(results) = req.results {
+            debug!("Processing query results for query_id: {}", results.query_id);
             match self.process_query_result(results).await {
                 Ok(_) => {
+                    trace!("Successfully processed query results");
                     let response = ProcessResultsResponse {
                         success: true,
                         message: "Results processed successfully".to_string(),
@@ -329,6 +332,7 @@ impl ReactionOutputHandler for GrpcReactionHandler {
         let shutdown_notify_clone = self.shutdown_notify.clone();
 
         info!("Starting Drasi ReactionService server on {}", addr);
+        info!("Server configured for query_ids: {:?}", self.settings.query_ids);
 
         let handle = tokio::spawn(async move {
             Server::builder()
@@ -341,6 +345,10 @@ impl ReactionOutputHandler for GrpcReactionHandler {
 
         *server_handle = Some(handle);
         *self.status.write().await = ReactionHandlerStatus::Running;
+        
+        // Give the server time to start listening
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        info!("Server is now listening and ready to accept connections on {}", self.settings.server_addr());
 
         Ok(())
     }

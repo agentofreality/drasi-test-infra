@@ -28,18 +28,22 @@
                               "batch_events": false,
                               "tls": false,
                               "source_id": "facilities-db"
+                            },
+                            {
+                              "kind": "JsonlFile",
+                              "max_lines_per_file": 15000
                             }
                           ],
                           "model_data_generator": {
                             "kind": "BuildingHierarchy",
                             "change_interval": [2000000000, 500000000, 500000000, 4000000000],
-                            "change_count": 1,
+                            "change_count": 100000,
                             "seed": 123456789,
                             "spacing_mode": "none",
                             "time_mode": "2025-01-03T10:03:15.4Z",
-                            "building_count": [10, 0],
-                            "floor_count": [10, 0],
-                            "room_count": [10, 0],                   
+                            "building_count": [1, 0],
+                            "floor_count": [1, 0],
+                            "room_count": [1, 0],                   
                             "room_sensors": [
                               {
                                 "kind": "NormalFloat",
@@ -86,7 +90,7 @@
                           "stop_triggers": [
                             {
                               "kind": "RecordCount",
-                              "record_count": 2
+                              "record_count": 89678
                             }
                           ]
                         }
@@ -111,6 +115,9 @@
                           {
                               "kind": "JsonlFile",
                               "max_lines_per_file": 15000
+                          },
+                          {
+                              "kind": "PerformanceMetrics"
                           }
                       ]
                   }

@@ -121,6 +121,7 @@ impl GrpcSourceChangeDispatcher {
         }
     }
 
+    #[allow(dead_code)]
     async fn health_check(&mut self) -> anyhow::Result<()> {
         self.ensure_connected().await?;
 

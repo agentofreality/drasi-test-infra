@@ -165,14 +165,25 @@ fn extract_labels(obj: &Map<String, JsonValue>) -> Vec<String> {
 fn extract_properties(obj: &Map<String, JsonValue>) -> Result<Struct> {
     let mut fields = BTreeMap::new();
 
-    for (key, value) in obj {
-        // Skip special fields
-        if key == "id" || key == "labels" || key == "startId" || key == "endId" {
-            continue;
+    // Check if there's a nested "properties" field (common in test data)
+    if let Some(JsonValue::Object(props)) = obj.get("properties") {
+        // Extract from nested properties object
+        for (key, value) in props {
+            if let Some(proto_value) = json_to_proto_value(value) {
+                fields.insert(key.clone(), proto_value);
+            }
         }
+    } else {
+        // Fall back to extracting from top-level fields (excluding special fields)
+        for (key, value) in obj {
+            // Skip special fields
+            if key == "id" || key == "labels" || key == "startId" || key == "endId" || key == "properties" {
+                continue;
+            }
 
-        if let Some(proto_value) = json_to_proto_value(value) {
-            fields.insert(key.clone(), proto_value);
+            if let Some(proto_value) = json_to_proto_value(value) {
+                fields.insert(key.clone(), proto_value);
+            }
         }
     }
 
