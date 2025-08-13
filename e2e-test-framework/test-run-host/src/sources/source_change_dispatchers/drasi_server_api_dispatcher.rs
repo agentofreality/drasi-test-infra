@@ -201,7 +201,7 @@ impl SourceChangeDispatcher for DrasiServerApiSourceChangeDispatcher {
                 anyhow::bail!("HTTP request failed with status: {}", status);
             }
 
-            log::debug!(
+            log::trace!(
                 "Successfully dispatched batch of {} events to {}",
                 events.len(),
                 url
@@ -241,7 +241,7 @@ impl SourceChangeDispatcher for DrasiServerApiSourceChangeDispatcher {
                 }
             }
 
-            log::debug!(
+            log::trace!(
                 "Successfully dispatched {} individual events to {}",
                 event_count,
                 url

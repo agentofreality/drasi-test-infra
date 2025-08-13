@@ -70,7 +70,7 @@ impl DrasiServerChannelSourceChangeDispatcher {
         );
 
         let settings = DrasiServerChannelSourceChangeDispatcherSettings::new(definition, storage)?;
-        log::info!(
+        log::debug!(
             "DrasiServerChannelSourceChangeDispatcher created with settings: drasi_server_id={:?}, source_id={}, buffer_size={}",
             settings.drasi_server_id,
             settings.source_id,
@@ -141,7 +141,7 @@ impl DrasiServerChannelSourceChangeDispatcher {
 
                             // Process events from the channel
                             while let Some(events) = receiver.recv().await {
-                                log::info!(
+                                log::trace!(
                                     "Channel receiver for source {} received {} events",
                                     source_id,
                                     events.len()
@@ -150,7 +150,7 @@ impl DrasiServerChannelSourceChangeDispatcher {
                                 // Convert and send events to Drasi Server
                                 if let Some(source_handle) = &app_handle.source {
                                     for event in &events {
-                                        log::info!(
+                                        log::trace!(
                                         "Dispatching event with op '{}' to source '{}' via ApplicationSourceHandle",
                                         event.op, source_id
                                     );
@@ -167,7 +167,7 @@ impl DrasiServerChannelSourceChangeDispatcher {
                                         }
                                     }
 
-                                    log::info!(
+                                    log::trace!(
                                     "Successfully dispatched {} events to source '{}' via ApplicationSourceHandle",
                                     events.len(),
                                     source_id
@@ -241,7 +241,7 @@ impl SourceChangeDispatcher for DrasiServerChannelSourceChangeDispatcher {
     ) -> anyhow::Result<()> {
         // First, check if we have queued events to dispatch
         if self.test_run_host.is_some() && !self.queued_events.is_empty() {
-            log::info!(
+            log::debug!(
                 "DrasiServerChannelDispatcher: Dispatching {} previously queued events to source '{}' on Drasi Server {}",
                 self.queued_events.len(),
                 self.settings.source_id,
@@ -257,7 +257,7 @@ impl SourceChangeDispatcher for DrasiServerChannelSourceChangeDispatcher {
             // Send the queued events through the channel
             match sender.send(queued_events).await {
                 Ok(()) => {
-                    log::debug!("Successfully dispatched queued events");
+                    log::trace!("Successfully dispatched queued events");
                 }
                 Err(e) => {
                     log::error!("Failed to dispatch queued events: {}", e);
@@ -285,7 +285,7 @@ impl SourceChangeDispatcher for DrasiServerChannelSourceChangeDispatcher {
             return Ok(());
         }
 
-        log::info!(
+        log::trace!(
             "DrasiServerChannelDispatcher: Dispatching {} events to source '{}' on Drasi Server {}",
             events.len(),
             self.settings.source_id,
@@ -302,7 +302,7 @@ impl SourceChangeDispatcher for DrasiServerChannelSourceChangeDispatcher {
         let num_events = owned_events.len();
         match sender.send(owned_events).await {
             Ok(()) => {
-                log::info!(
+                log::trace!(
                     "Successfully dispatched {} events to Drasi Server Channel for source {}",
                     num_events,
                     self.settings.source_id
@@ -345,7 +345,7 @@ async fn dispatch_event_to_drasi(
     use drasi_server::PropertyMapBuilder;
 
     // Log the event structure for debugging
-    log::info!(
+    log::trace!(
         "Event structure: op={}, payload.after={:?}",
         event.op,
         event.payload.after

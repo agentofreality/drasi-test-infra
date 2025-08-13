@@ -146,7 +146,7 @@ impl SourceChangeDispatcher for HttpSourceChangeDispatcher {
                 anyhow::bail!("HTTP request failed with status: {}", status);
             }
 
-            debug!(
+            trace!(
                 "Successfully dispatched batch of {} events to {}",
                 events.len(),
                 url
@@ -182,7 +182,7 @@ impl SourceChangeDispatcher for HttpSourceChangeDispatcher {
                 }
             }
 
-            debug!(
+            trace!(
                 "Successfully dispatched {} individual events to {}",
                 event_count, url
             );

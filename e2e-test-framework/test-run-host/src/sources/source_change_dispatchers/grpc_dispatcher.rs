@@ -210,7 +210,7 @@ impl SourceChangeDispatcher for GrpcSourceChangeDispatcher {
                 total_processed += response.events_processed;
             }
 
-            debug!(
+            trace!(
                 "Successfully dispatched {} events to Drasi SourceService",
                 total_processed
             );
@@ -244,7 +244,7 @@ impl SourceChangeDispatcher for GrpcSourceChangeDispatcher {
                 }
             }
 
-            debug!(
+            trace!(
                 "Successfully dispatched {} individual events to Drasi SourceService",
                 event_count
             );
