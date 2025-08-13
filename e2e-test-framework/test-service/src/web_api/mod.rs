@@ -27,29 +27,16 @@ use tokio::{select, signal};
 use utoipa::{OpenApi, ToSchema};
 
 use data_collector::DataCollector;
-use drasi_server_queries::get_drasi_server_queries_routes;
-use drasi_server_reactions::get_drasi_server_reactions_routes;
-use drasi_server_sources::get_drasi_server_sources_routes;
-use drasi_servers::get_drasi_servers_routes;
-use queries::get_queries_routes;
-use reactions::get_reactions_routes;
 use repo::get_test_repo_routes;
-use sources::get_sources_routes;
-use test_data_store::TestDataStore;
+use test_data_store::{test_run_storage::TestRunId, TestDataStore};
 use test_run_host::TestRunHost;
 use test_runs::get_test_runs_routes;
 use utoipa_swagger_ui::SwaggerUi;
+use std::collections::HashMap;
 
 use crate::openapi::ApiDoc;
 
-pub mod drasi_server_queries;
-pub mod drasi_server_reactions;
-pub mod drasi_server_sources;
-pub mod drasi_servers;
-pub mod queries;
-pub mod reactions;
 pub mod repo;
-pub mod sources;
 pub mod test_runs;
 
 #[derive(Debug, Error)]
@@ -60,8 +47,6 @@ pub enum TestServiceWebApiError {
     NotFound(String, String),
     #[error("Serde Error: {0}")]
     SerdeJsonError(serde_json::Error),
-    #[error("TestRunHost is in an Error state: {0}")]
-    TestRunHostError(String),
     #[error("NotReady: {0}")]
     NotReady(String),
     #[error("IO Error: {0}")]
@@ -100,9 +85,6 @@ impl IntoResponse for TestServiceWebApiError {
             TestServiceWebApiError::SerdeJsonError(e) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, Json(e.to_string())).into_response()
             }
-            TestServiceWebApiError::TestRunHostError(msg) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(msg)).into_response()
-            }
             TestServiceWebApiError::NotReady(msg) => {
                 (StatusCode::SERVICE_UNAVAILABLE, Json(msg)).into_response()
             }
@@ -125,9 +107,28 @@ impl IntoResponse for TestServiceWebApiError {
     },
     "test_run_host": {
         "status": "Active",
-        "test_run_query_ids": ["query-1", "query-2"],
-        "test_run_reaction_ids": ["reaction-1", "reaction-2"],
-        "test_run_source_ids": ["source-1", "source-2"]
+        "test_runs": [
+            {
+                "id": "test_repo.test_id.run_001",
+                "test_id": "test_id",
+                "test_repo_id": "test_repo",
+                "test_run_id": "run_001",
+                "sources": ["facilities-db"],
+                "queries": ["query-1"],
+                "reactions": ["building-comfort"],
+                "drasi_servers": []
+            },
+            {
+                "id": "test_repo.test_id.run_002",
+                "test_id": "test_id",
+                "test_repo_id": "test_repo",
+                "test_run_id": "run_002",
+                "sources": ["source-1", "source-2"],
+                "queries": [],
+                "reactions": ["reaction-1"],
+                "drasi_servers": ["server-1"]
+            }
+        ]
     }
 }))]
 pub struct TestServiceStateResponse {
@@ -154,19 +155,44 @@ pub struct TestDataStoreStateResponse {
 #[derive(Debug, Serialize, ToSchema)]
 #[schema(example = json!({
     "status": "Active",
-    "test_run_query_ids": ["query-1", "query-2"],
-    "test_run_reaction_ids": ["reaction-1", "reaction-2"],
-    "test_run_source_ids": ["source-1", "source-2"]
+    "test_runs": [
+        {
+            "id": "test_repo.test_id.run_001",
+            "test_id": "test_id",
+            "test_repo_id": "test_repo",
+            "test_run_id": "run_001",
+            "sources": ["facilities-db"],
+            "queries": ["query-1"],
+            "reactions": ["building-comfort"],
+            "drasi_servers": []
+        }
+    ]
 }))]
 pub struct TestRunHostStateResponse {
     /// Current status of the test run host
     pub status: String,
-    /// List of active test run query IDs
-    pub test_run_query_ids: Vec<String>,
-    /// List of active test run reaction IDs
-    pub test_run_reaction_ids: Vec<String>,
-    /// List of active test run source IDs
-    pub test_run_source_ids: Vec<String>,
+    /// List of test runs with their nested resources
+    pub test_runs: Vec<TestRunSummary>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TestRunSummary {
+    /// Full test run ID
+    pub id: String,
+    /// Test ID component
+    pub test_id: String,
+    /// Test repository ID component
+    pub test_repo_id: String,
+    /// Test run ID component
+    pub test_run_id: String,
+    /// Source IDs within this test run
+    pub sources: Vec<String>,
+    /// Query IDs within this test run
+    pub queries: Vec<String>,
+    /// Reaction IDs within this test run
+    pub reactions: Vec<String>,
+    /// Drasi server IDs within this test run
+    pub drasi_servers: Vec<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -193,16 +219,8 @@ pub(crate) async fn start_web_api(
     let api_router = Router::new()
         .route("/", get(get_service_info_handler))
         .nest("/test_repos", get_test_repo_routes())
-        // New hierarchical API routes
-        .merge(get_test_runs_routes())
-        // Legacy flat API routes (kept for backward compatibility)
-        .nest("/test_run_host", get_drasi_servers_routes())
-        .nest("/test_run_host", get_drasi_server_sources_routes())
-        .nest("/test_run_host", get_drasi_server_queries_routes())
-        .nest("/test_run_host", get_drasi_server_reactions_routes())
-        .nest("/test_run_host", get_queries_routes())
-        .nest("/test_run_host", get_reactions_routes())
-        .nest("/test_run_host", get_sources_routes());
+        // Hierarchical API routes
+        .merge(get_test_runs_routes());
 
     // Create the complete application with Swagger UI
     let app = api_router
@@ -298,6 +316,81 @@ async fn get_service_info_handler(
 ) -> anyhow::Result<impl IntoResponse, TestServiceWebApiError> {
     log::info!("Processing call - service_info");
 
+    // Get all resource IDs
+    let test_run_ids = test_run_host.get_test_run_ids().await?;
+    let source_ids = test_run_host.get_test_source_ids().await?;
+    let query_ids = test_run_host.get_test_query_ids().await?;
+    let reaction_ids = test_run_host.get_test_reaction_ids().await?;
+    let drasi_server_ids = test_run_host.get_test_drasi_server_ids().await?;
+    
+    // Build hierarchical structure
+    let mut test_runs_map: HashMap<String, TestRunSummary> = HashMap::new();
+    
+    // Process each test run
+    for run_id_str in test_run_ids {
+        if let Ok(run_id) = TestRunId::try_from(run_id_str.as_str()) {
+            let test_run = TestRunSummary {
+                id: run_id_str.clone(),
+                test_id: run_id.test_id.clone(),
+                test_repo_id: run_id.test_repo_id.clone(),
+                test_run_id: run_id.test_run_id.clone(),
+                sources: Vec::new(),
+                queries: Vec::new(),
+                reactions: Vec::new(),
+                drasi_servers: Vec::new(),
+            };
+            test_runs_map.insert(run_id_str, test_run);
+        }
+    }
+    
+    // Add sources to their test runs
+    for source_id in source_ids {
+        // Extract test run ID from source ID (format: test_repo.test_id.run_id.source_id)
+        if let Some(run_id) = extract_test_run_id(&source_id) {
+            if let Some(test_run) = test_runs_map.get_mut(&run_id) {
+                // Extract just the source name
+                if let Some(source_name) = source_id.split('.').last() {
+                    test_run.sources.push(source_name.to_string());
+                }
+            }
+        }
+    }
+    
+    // Add queries to their test runs
+    for query_id in query_ids {
+        if let Some(run_id) = extract_test_run_id(&query_id) {
+            if let Some(test_run) = test_runs_map.get_mut(&run_id) {
+                if let Some(query_name) = query_id.split('.').last() {
+                    test_run.queries.push(query_name.to_string());
+                }
+            }
+        }
+    }
+    
+    // Add reactions to their test runs
+    for reaction_id in reaction_ids {
+        if let Some(run_id) = extract_test_run_id(&reaction_id) {
+            if let Some(test_run) = test_runs_map.get_mut(&run_id) {
+                if let Some(reaction_name) = reaction_id.split('.').last() {
+                    test_run.reactions.push(reaction_name.to_string());
+                }
+            }
+        }
+    }
+    
+    // Add drasi servers to their test runs
+    for server_id in drasi_server_ids {
+        if let Some(run_id) = extract_test_run_id(&server_id) {
+            if let Some(test_run) = test_runs_map.get_mut(&run_id) {
+                if let Some(server_name) = server_id.split('.').last() {
+                    test_run.drasi_servers.push(server_name.to_string());
+                }
+            }
+        }
+    }
+    
+    let test_runs: Vec<TestRunSummary> = test_runs_map.into_values().collect();
+
     Ok(Json(TestServiceStateResponse {
         data_store: TestDataStoreStateResponse {
             path: test_data_store
@@ -309,13 +402,23 @@ async fn get_service_info_handler(
         },
         test_run_host: TestRunHostStateResponse {
             status: test_run_host.get_status().await?.to_string(),
-            test_run_query_ids: test_run_host.get_test_query_ids().await?,
-            test_run_reaction_ids: test_run_host.get_test_reaction_ids().await?,
-            test_run_source_ids: test_run_host.get_test_source_ids().await?,
+            test_runs,
         },
         data_collector: DataCollectorStateResponse {
             status: data_collector.get_status().await?.to_string(),
             data_collection_ids: data_collector.get_data_collection_ids().await?,
         },
     }))
+}
+
+/// Extract test run ID from a full resource ID
+/// Format: test_repo_id.test_id.test_run_id.resource_id
+/// Returns: test_repo_id.test_id.test_run_id
+fn extract_test_run_id(full_id: &str) -> Option<String> {
+    let parts: Vec<&str> = full_id.split('.').collect();
+    if parts.len() >= 4 {
+        Some(format!("{}.{}.{}", parts[0], parts[1], parts[2]))
+    } else {
+        None
+    }
 }
