@@ -267,6 +267,7 @@ async fn http_server_thread(
     let app = Router::new()
         .route(&settings.path, any(handle_reaction))
         .route(&format!("{}/*path", &settings.path), any(handle_reaction))
+        .route("/batch", any(handle_reaction))
         .with_state(state);
 
     let addr = match format!("{}:{}", settings.host, settings.port).parse::<SocketAddr>() {
@@ -284,7 +285,7 @@ async fn http_server_thread(
         }
     };
 
-    log::info!("HTTP Reaction Handler listening on http://{}", addr);
+    log::info!("HTTP Reaction Handler listening on http://{} with path {} and batch support", addr, settings.path);
 
     let server = Server::bind(&addr)
         .serve(app.into_make_service())
@@ -340,78 +341,189 @@ async fn handle_reaction(
     let traceparent = header_map.get("traceparent").cloned();
     let tracestate = header_map.get("tracestate").cloned();
 
-    // Extract sequence from correlation header or request body
-    let sequence = if let Some(correlation_header) = &state.settings.correlation_header {
-        header_map
-            .get(correlation_header)
-            .and_then(|v| v.parse::<u64>().ok())
-            .unwrap_or(0)
-    } else {
-        request_body
-            .get("sequence")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0)
-    };
-
-    // Determine reaction type from path or request body
-    let reaction_type = if uri.path().contains("/added") {
-        "added".to_string()
-    } else if uri.path().contains("/updated") {
-        "updated".to_string()
-    } else if uri.path().contains("/deleted") {
-        "deleted".to_string()
-    } else {
-        request_body
-            .get("type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-            .to_string()
-    };
-
-    let query_id = state.settings.test_run_query_id.test_query_id.clone();
-
-    // Create reaction data as JSON
-    let reaction_data = serde_json::json!({
-        "query_id": query_id,
-        "reaction_type": reaction_type,
-        "request_body": request_body,
-    });
-
-    // Create metadata with HTTP-specific information
-    let metadata = serde_json::json!({
-        "request_method": method.to_string(),
-        "request_path": uri.path().to_string(),
-        "headers": header_map,
-        "traceparent": traceparent,
-        "tracestate": tracestate,
-    });
-
-    let invocation = ReactionInvocation {
-        handler_type: ReactionHandlerType::Http,
-        payload: ReactionHandlerPayload {
-            value: reaction_data,
-            timestamp: chrono::DateTime::from_timestamp_nanos(invocation_time_ns as i64),
-            invocation_id: Some(format!("{}-{}", query_id, sequence)),
-            metadata: Some(metadata),
-        },
-    };
+    // Check if this is a batch request (array of batch results or single batch result)
+    let is_batch = uri.path().contains("/batch") || request_body.is_array() || 
+                   (request_body.is_object() && request_body.get("results").is_some());
 
     log::debug!(
-        "Received reaction invocation: {} {} (sequence: {})",
+        "HTTP Reaction Handler received {} request to {} with body type: {}",
         method,
         uri.path(),
-        sequence
+        if is_batch { "batch" } else { "single" }
     );
 
-    match state
-        .tx
-        .send(ReactionHandlerMessage::Invocation(invocation))
-        .await
-    {
-        Ok(_) => (StatusCode::OK, "OK"),
-        Err(e) => {
-            log::error!("Failed to send reaction message: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error")
+    if is_batch {
+        // Handle batch of events
+        let batch_items = if request_body.is_array() {
+            // Direct array of batch results
+            request_body.as_array().unwrap().clone()
+        } else if let Some(results) = request_body.get("results") {
+            // Single batch result with results array
+            if let Some(arr) = results.as_array() {
+                vec![request_body.clone()]
+            } else {
+                vec![]
+            }
+        } else {
+            vec![]
+        };
+
+        log::info!(
+            "Processing batch with {} items at path {}",
+            batch_items.len(),
+            uri.path()
+        );
+
+        // Process each batch item
+        for (idx, batch_item) in batch_items.iter().enumerate() {
+            let query_id = batch_item.get("query_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or(&state.settings.test_run_query_id.test_query_id)
+                .to_string();
+
+            let results = batch_item.get("results")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default();
+
+            log::debug!(
+                "Batch item {} has {} results for query {}",
+                idx,
+                results.len(),
+                query_id
+            );
+
+            // Process each result in the batch
+            for (result_idx, result) in results.iter().enumerate() {
+                // Determine reaction type from the result
+                let reaction_type = if result.get("before").is_some() && result.get("after").is_some() {
+                    "updated"
+                } else if result.get("after").is_some() {
+                    "added"
+                } else if result.get("before").is_some() {
+                    "deleted"
+                } else {
+                    "unknown"
+                }.to_string();
+
+                let sequence = (idx * 1000 + result_idx) as u64; // Generate sequence for batch items
+
+                // Create reaction data as JSON
+                let reaction_data = serde_json::json!({
+                    "query_id": query_id,
+                    "reaction_type": reaction_type,
+                    "request_body": result,
+                    "batch_index": idx,
+                    "result_index": result_idx,
+                });
+
+                // Create metadata with HTTP-specific information
+                let metadata = serde_json::json!({
+                    "request_method": method.to_string(),
+                    "request_path": uri.path().to_string(),
+                    "headers": header_map.clone(),
+                    "traceparent": traceparent.clone(),
+                    "tracestate": tracestate.clone(),
+                    "is_batch": true,
+                });
+
+                let invocation = ReactionInvocation {
+                    handler_type: ReactionHandlerType::Http,
+                    payload: ReactionHandlerPayload {
+                        value: reaction_data,
+                        timestamp: chrono::DateTime::from_timestamp_nanos(invocation_time_ns as i64),
+                        invocation_id: Some(format!("{}-{}", query_id, sequence)),
+                        metadata: Some(metadata),
+                    },
+                };
+
+                if let Err(e) = state
+                    .tx
+                    .send(ReactionHandlerMessage::Invocation(invocation))
+                    .await
+                {
+                    log::error!("Failed to send batch reaction message: {}", e);
+                }
+            }
+        }
+
+        (StatusCode::OK, "Batch processed")
+    } else {
+        // Handle single event (original logic)
+        // Extract sequence from correlation header or request body
+        let sequence = if let Some(correlation_header) = &state.settings.correlation_header {
+            header_map
+                .get(correlation_header)
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(0)
+        } else {
+            request_body
+                .get("sequence")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0)
+        };
+
+        // Determine reaction type from path or request body
+        let reaction_type = if uri.path().contains("/added") {
+            "added".to_string()
+        } else if uri.path().contains("/updated") {
+            "updated".to_string()
+        } else if uri.path().contains("/deleted") {
+            "deleted".to_string()
+        } else {
+            request_body
+                .get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown")
+                .to_string()
+        };
+
+        let query_id = state.settings.test_run_query_id.test_query_id.clone();
+
+        // Create reaction data as JSON
+        let reaction_data = serde_json::json!({
+            "query_id": query_id,
+            "reaction_type": reaction_type,
+            "request_body": request_body,
+        });
+
+        // Create metadata with HTTP-specific information
+        let metadata = serde_json::json!({
+            "request_method": method.to_string(),
+            "request_path": uri.path().to_string(),
+            "headers": header_map,
+            "traceparent": traceparent,
+            "tracestate": tracestate,
+            "is_batch": false,
+        });
+
+        let invocation = ReactionInvocation {
+            handler_type: ReactionHandlerType::Http,
+            payload: ReactionHandlerPayload {
+                value: reaction_data,
+                timestamp: chrono::DateTime::from_timestamp_nanos(invocation_time_ns as i64),
+                invocation_id: Some(format!("{}-{}", query_id, sequence)),
+                metadata: Some(metadata),
+            },
+        };
+
+        log::debug!(
+            "Received single reaction invocation: {} {} (sequence: {})",
+            method,
+            uri.path(),
+            sequence
+        );
+
+        match state
+            .tx
+            .send(ReactionHandlerMessage::Invocation(invocation))
+            .await
+        {
+            Ok(_) => (StatusCode::OK, "OK"),
+            Err(e) => {
+                log::error!("Failed to send reaction message: {}", e);
+                (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error")
+            }
         }
     }
 }
