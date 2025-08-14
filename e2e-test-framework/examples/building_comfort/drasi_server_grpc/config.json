@@ -25,7 +25,7 @@
                               "host": "localhost",
                               "port": 50051,
                               "timeout_seconds": 60,
-                              "batch_events": false,
+                              "batch_events": true,
                               "tls": false,
                               "source_id": "facilities-db"
                             },

@@ -150,19 +150,39 @@ impl DrasiServerChannelHandler {
                                 );
 
                                     while let Some(query_result) = stream.next().await {
-                                        // Convert QueryResult to JSON for the channel
-                                        let result_json = serde_json::json!({
-                                            "query_id": query_result.query_id,
-                                            "results": query_result.results,
-                                            "metadata": query_result.metadata,
-                                        });
+                                        // Send each result item individually so stop triggers can fire mid-batch
+                                        if query_result.results.is_empty() {
+                                            // Send empty result as a single item
+                                            let result_json = serde_json::json!({
+                                                "query_id": query_result.query_id,
+                                                "results": [],
+                                                "metadata": query_result.metadata,
+                                            });
 
-                                        if let Err(e) = tx.send(result_json).await {
-                                            log::error!(
-                                                "Failed to send query result through channel: {}",
-                                                e
-                                            );
-                                            break;
+                                            if let Err(e) = tx.send(result_json).await {
+                                                log::error!(
+                                                    "Failed to send query result through channel: {}",
+                                                    e
+                                                );
+                                                break;
+                                            }
+                                        } else {
+                                            // Send each result item as a separate message
+                                            for result_item in &query_result.results {
+                                                let result_json = serde_json::json!({
+                                                    "query_id": query_result.query_id.clone(),
+                                                    "result": result_item,
+                                                    "metadata": query_result.metadata.clone(),
+                                                });
+
+                                                if let Err(e) = tx.send(result_json).await {
+                                                    log::error!(
+                                                        "Failed to send query result through channel: {}",
+                                                        e
+                                                    );
+                                                    break;
+                                                }
+                                            }
                                         }
                                     }
                                 }
