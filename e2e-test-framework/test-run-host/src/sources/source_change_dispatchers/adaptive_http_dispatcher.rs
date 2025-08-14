@@ -50,6 +50,7 @@ struct HttpChangeEvent {
 
 /// Response from the HTTP endpoint
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct EventResponse {
     success: bool,
     message: String,
@@ -61,6 +62,7 @@ pub struct AdaptiveHttpSourceChangeDispatcher {
     port: u16,
     endpoint: String,
     batch_endpoint: String,
+    #[allow(dead_code)]
     timeout_seconds: u64,
     source_id: String,
     adaptive_config: AdaptiveBatchConfig,

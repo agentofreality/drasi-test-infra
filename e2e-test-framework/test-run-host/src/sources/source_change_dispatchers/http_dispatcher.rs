@@ -213,6 +213,10 @@ mod tests {
             endpoint: None,
             timeout_seconds: None,
             batch_events: None,
+            adaptive_enabled: None,
+            batch_size: None,
+            batch_timeout_ms: None,
+            source_id: None,
         };
 
         let source_id = "test-source".to_string();
@@ -237,6 +241,10 @@ mod tests {
             endpoint: Some("/webhooks/changes".to_string()),
             timeout_seconds: Some(60),
             batch_events: Some(false),
+            adaptive_enabled: None,
+            batch_size: None,
+            batch_timeout_ms: None,
+            source_id: None,
         };
 
         let source_id = "test-source".to_string();

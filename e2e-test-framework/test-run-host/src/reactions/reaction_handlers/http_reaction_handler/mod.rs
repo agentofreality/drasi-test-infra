@@ -359,7 +359,7 @@ async fn handle_reaction(
             request_body.as_array().unwrap().clone()
         } else if let Some(results) = request_body.get("results") {
             // Single batch result with results array
-            if let Some(arr) = results.as_array() {
+            if let Some(_arr) = results.as_array() {
                 vec![request_body.clone()]
             } else {
                 vec![]
