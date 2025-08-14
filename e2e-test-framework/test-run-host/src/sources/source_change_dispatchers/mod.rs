@@ -19,6 +19,7 @@ use test_data_store::{
     test_run_storage::TestRunSourceStorage,
 };
 
+pub mod adaptive_grpc_dispatcher;
 pub mod console_dispatcher;
 pub mod dapr_dispatcher;
 pub mod drasi_server_api_dispatcher;
@@ -90,10 +91,18 @@ pub async fn create_source_change_dispatcher(
             http_dispatcher::HttpSourceChangeDispatcher::new(def, output_storage.clone())?,
         )
             as Box<dyn SourceChangeDispatcher + Send + Sync>),
-        SourceChangeDispatcherDefinition::Grpc(def) => Ok(Box::new(
-            grpc_dispatcher::GrpcSourceChangeDispatcher::new(def, output_storage.clone()).await?,
-        )
-            as Box<dyn SourceChangeDispatcher + Send + Sync>),
+        SourceChangeDispatcherDefinition::Grpc(def) => {
+            // Use adaptive dispatcher if enabled
+            if def.adaptive_enabled.unwrap_or(false) {
+                Ok(Box::new(
+                    adaptive_grpc_dispatcher::AdaptiveGrpcSourceChangeDispatcher::new(def, output_storage.clone()).await?,
+                ) as Box<dyn SourceChangeDispatcher + Send + Sync>)
+            } else {
+                Ok(Box::new(
+                    grpc_dispatcher::GrpcSourceChangeDispatcher::new(def, output_storage.clone()).await?,
+                ) as Box<dyn SourceChangeDispatcher + Send + Sync>)
+            }
+        },
         SourceChangeDispatcherDefinition::JsonlFile(def) => Ok(Box::new(
             jsonl_file_dispatcher::JsonlFileSourceChangeDispatcher::new(def, output_storage)
                 .await?,
