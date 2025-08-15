@@ -401,6 +401,11 @@ pub struct HttpSourceChangeDispatcherDefinition {
     pub endpoint: Option<String>,
     pub timeout_seconds: Option<u64>,
     pub batch_events: Option<bool>,
+    pub source_id: Option<String>,
+    // Adaptive batching fields
+    pub adaptive_enabled: Option<bool>,
+    pub batch_size: Option<u64>,
+    pub batch_timeout_ms: Option<u64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -411,6 +416,10 @@ pub struct GrpcSourceChangeDispatcherDefinition {
     pub batch_events: Option<bool>,
     pub tls: Option<bool>,
     pub source_id: String, // Required for Drasi SourceService
+    // Adaptive batching configuration
+    pub adaptive_enabled: Option<bool>,
+    pub batch_size: Option<u64>,
+    pub batch_timeout_ms: Option<u64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

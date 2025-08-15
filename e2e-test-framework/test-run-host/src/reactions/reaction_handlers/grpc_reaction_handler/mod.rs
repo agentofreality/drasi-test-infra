@@ -86,36 +86,65 @@ impl GrpcServerImpl {
         // Convert Drasi QueryResult to internal format
         let json_results = convert_from_drasi_query_result(result.clone())?;
 
-        // Generate invocation ID
-        let mut count = self.invocation_count.write().await;
-        *count += 1;
-        let invocation_id = format!("grpc-invocation-{}", *count);
-        drop(count);
+        // Process each result item as a separate invocation
+        // This ensures stop triggers can fire mid-batch
+        if json_results.is_empty() {
+            // Handle empty results
+            let mut count = self.invocation_count.write().await;
+            *count += 1;
+            let invocation_id = format!("grpc-invocation-{}", *count);
+            drop(count);
 
-        // Create reaction payload - convert Vec<JsonValue> to single JsonValue
-        let payload = ReactionHandlerPayload {
-            value: serde_json::json!({
-                "query_id": result.query_id,
-                "results": json_results,
-            }),
-            timestamp,
-            invocation_id: Some(invocation_id),
-            metadata: None,
-        };
+            let payload = ReactionHandlerPayload {
+                value: serde_json::json!({
+                    "query_id": result.query_id,
+                    "results": [],
+                }),
+                timestamp,
+                invocation_id: Some(invocation_id),
+                metadata: None,
+            };
 
-        // Create internal invocation
-        let invocation = ReactionInvocation {
-            handler_type: ReactionHandlerType::Grpc,
-            payload,
-        };
+            let invocation = ReactionInvocation {
+                handler_type: ReactionHandlerType::Grpc,
+                payload,
+            };
 
-        // Send to reaction output handler
-        let message = ReactionHandlerMessage::Invocation(invocation);
+            let message = ReactionHandlerMessage::Invocation(invocation);
+            self.tx
+                .send(message)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to send message to output handler: {}", e))?;
+        } else {
+            // Send each item as a separate invocation
+            for json_result in json_results {
+                let mut count = self.invocation_count.write().await;
+                *count += 1;
+                let invocation_id = format!("grpc-invocation-{}", *count);
+                drop(count);
 
-        self.tx
-            .send(message)
-            .await
-            .map_err(|e| anyhow::anyhow!("Failed to send message to output handler: {}", e))?;
+                let payload = ReactionHandlerPayload {
+                    value: serde_json::json!({
+                        "query_id": result.query_id.clone(),
+                        "result": json_result,
+                    }),
+                    timestamp,
+                    invocation_id: Some(invocation_id),
+                    metadata: None,
+                };
+
+                let invocation = ReactionInvocation {
+                    handler_type: ReactionHandlerType::Grpc,
+                    payload,
+                };
+
+                let message = ReactionHandlerMessage::Invocation(invocation);
+                self.tx
+                    .send(message)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to send message to output handler: {}", e))?;
+            }
+        }
 
         Ok(())
     }
@@ -132,14 +161,15 @@ impl ReactionService for GrpcServerImpl {
 
         if let Some(results) = req.results {
             debug!("Processing query results for query_id: {}", results.query_id);
+            let items_count = results.results.len() as u32;
             match self.process_query_result(results).await {
                 Ok(_) => {
-                    trace!("Successfully processed query results");
+                    trace!("Successfully processed {} query result items", items_count);
                     let response = ProcessResultsResponse {
                         success: true,
                         message: "Results processed successfully".to_string(),
                         error: String::new(),
-                        items_processed: 1,
+                        items_processed: items_count,
                     };
                     Ok(Response::new(response))
                 }
@@ -181,11 +211,13 @@ impl ReactionService for GrpcServerImpl {
             let mut items_processed = 0u64;
 
             while let Ok(Some(result)) = stream.message().await {
-                items_processed += result.results.len() as u64;
+                let batch_item_count = result.results.len() as u64;
+                items_processed += batch_item_count;
                 batches_processed += 1;
 
                 match self_clone.process_query_result(result).await {
                     Ok(_) => {
+                        trace!("Processed batch {} with {} items", batches_processed, batch_item_count);
                         let response = StreamResultsResponse {
                             success: true,
                             message: "Batch processed".to_string(),
@@ -210,6 +242,8 @@ impl ReactionService for GrpcServerImpl {
                     }
                 }
             }
+            
+            debug!("Stream completed: {} batches, {} total items", batches_processed, items_processed);
         });
 
         Ok(Response::new(tokio_stream::wrappers::ReceiverStream::new(

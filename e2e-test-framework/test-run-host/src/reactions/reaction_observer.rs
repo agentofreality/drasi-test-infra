@@ -724,6 +724,7 @@ async fn handle_reaction_invocation(
         .timestamp
         .timestamp_nanos_opt()
         .unwrap_or(0) as u64;
+    // Always increment by 1 since each invocation is a single item
     state.metrics.reaction_invocation_count += 1;
     if state.metrics.reaction_invocation_first_ns == 0 {
         state.metrics.reaction_invocation_first_ns = timestamp_ns;
@@ -732,10 +733,11 @@ async fn handle_reaction_invocation(
 
     // Log the reaction
     log::debug!(
-        "Reaction invoked: type={:?}, invocation_id={:?}, timestamp={}",
+        "Reaction invoked: type={:?}, invocation_id={:?}, timestamp={}, total_count={}",
         invocation.handler_type,
         invocation.payload.invocation_id,
-        invocation.payload.timestamp
+        invocation.payload.timestamp,
+        state.metrics.reaction_invocation_count
     );
 
     // Convert reaction invocation to HandlerRecord and log it

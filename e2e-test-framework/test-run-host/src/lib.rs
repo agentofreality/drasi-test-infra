@@ -55,6 +55,7 @@ pub mod grpc_converters;
 pub mod queries;
 pub mod reactions;
 pub mod sources;
+pub mod utils;
 
 // Re-export api_models for use by test-service
 pub use drasi_servers::api_models;

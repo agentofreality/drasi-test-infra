@@ -1,6 +1,6 @@
 {
   "data_store": {
-      "data_store_path": "examples/building_comfort/drasi_server_grpc/test_data_cache",
+      "data_store_path": "examples/building_comfort/drasi_server_http_adaptive/test_data_cache",
       "delete_on_start": true,
       "delete_on_stop": true,
       "test_repos": [
@@ -12,7 +12,7 @@
                   {
                       "test_id": "building_comfort",
                       "version": 1,
-                      "description": "",
+                      "description": "Test with adaptive HTTP batching",
                       "test_folder": "building_comfort",
                       "queries": [],
                       "sources": [
@@ -21,13 +21,14 @@
                           "kind": "Model",
                           "source_change_dispatchers": [ 
                             {
-                              "kind": "Grpc",
-                              "host": "localhost",
-                              "port": 50051,
-                              "timeout_seconds": 60,
+                              "kind": "Http",
+                              "url": "http://localhost",
+                              "port": 8081,
                               "batch_events": true,
-                              "tls": false,
-                              "source_id": "facilities-db"
+                              "adaptive_enabled": true,
+                              "batch_size": 1000,
+                              "batch_timeout_ms": 50,
+                              "source_id": "events-http"
                             },
                             {
                               "kind": "JsonlFile",
@@ -72,20 +73,18 @@
                             ]
                           },
                           "subscribers": [
-                            { "node_id": "default", "query_id": "building-comfort" }
+                            { "node_id": "default", "query_id": "event-processing" }
                           ]
                         }
                       ],
                       "reactions": [
                         {
-                          "test_reaction_id": "building-comfort",
+                          "test_reaction_id": "http-webhook",
                           "output_handler": {
-                            "kind": "Grpc",
-                            "host": "0.0.0.0",
-                            "port": 50052,
-                            "correlation_metadata_key": "x-query-sequence",
-                            "query_ids": ["building-comfort"],
-                            "include_initial_state": false
+                            "kind": "Http",
+                            "port": 3000,
+                            "path": "/events",
+                            "correlation_header": "X-Query-Sequence"
                           },
                           "stop_triggers": [
                             {
@@ -105,11 +104,11 @@
           {
               "test_id": "building_comfort",
               "test_repo_id": "drasi_server_dev_repo",
-              "test_run_id": "test_run_001",
+              "test_run_id": "test_run_http_adaptive_001",
               "queries": [],
               "reactions": [
                   {
-                      "test_reaction_id": "building-comfort",
+                      "test_reaction_id": "http-webhook",
                       "start_immediately": true,
                       "output_loggers": [
                           {

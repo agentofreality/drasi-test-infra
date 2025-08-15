@@ -1,6 +1,6 @@
 {
   "data_store": {
-      "data_store_path": "examples/building_comfort/drasi_server_grpc/test_data_cache",
+      "data_store_path": "examples/building_comfort/drasi_server_grpc_adaptive/test_data_cache",
       "delete_on_start": true,
       "delete_on_stop": true,
       "test_repos": [
@@ -12,7 +12,7 @@
                   {
                       "test_id": "building_comfort",
                       "version": 1,
-                      "description": "",
+                      "description": "Test with adaptive gRPC batching",
                       "test_folder": "building_comfort",
                       "queries": [],
                       "sources": [
@@ -26,6 +26,9 @@
                               "port": 50051,
                               "timeout_seconds": 60,
                               "batch_events": true,
+                              "adaptive_enabled": true,
+                              "batch_size": 1000,
+                              "batch_timeout_ms": 50,
                               "tls": false,
                               "source_id": "facilities-db"
                             },
@@ -105,7 +108,7 @@
           {
               "test_id": "building_comfort",
               "test_repo_id": "drasi_server_dev_repo",
-              "test_run_id": "test_run_001",
+              "test_run_id": "test_run_adaptive_001",
               "queries": [],
               "reactions": [
                   {

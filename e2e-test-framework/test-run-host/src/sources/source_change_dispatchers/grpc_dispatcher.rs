@@ -267,6 +267,9 @@ mod tests {
             batch_events: Some(true),
             tls: Some(false),
             source_id: "test-source".to_string(),
+            adaptive_enabled: None,
+            batch_size: None,
+            batch_timeout_ms: None,
         };
 
         let settings = GrpcSourceChangeDispatcherSettings::new(&definition).unwrap();
@@ -289,6 +292,9 @@ mod tests {
             batch_events: None,
             tls: Some(true),
             source_id: "test-source".to_string(),
+            adaptive_enabled: None,
+            batch_size: None,
+            batch_timeout_ms: None,
         };
 
         let settings = GrpcSourceChangeDispatcherSettings::new(&definition).unwrap();

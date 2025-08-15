@@ -111,6 +111,14 @@ impl SourceChangeDispatcher for HttpSourceChangeDispatcher {
         }
 
         let url = self.settings.full_url();
+        
+        log::info!(
+            "HTTP dispatcher sending {} events to {} (source_id: {}, batch: {})",
+            events.len(),
+            url,
+            self.settings.source_id,
+            self.settings.batch_events
+        );
 
         if self.settings.batch_events {
             // Log request body at debug level
@@ -146,10 +154,11 @@ impl SourceChangeDispatcher for HttpSourceChangeDispatcher {
                 anyhow::bail!("HTTP request failed with status: {}", status);
             }
 
-            trace!(
-                "Successfully dispatched batch of {} events to {}",
+            log::info!(
+                "Successfully dispatched batch of {} events to {} - Status: {}",
                 events.len(),
-                url
+                url,
+                status
             );
         } else {
             let event_count = events.len();
@@ -204,6 +213,10 @@ mod tests {
             endpoint: None,
             timeout_seconds: None,
             batch_events: None,
+            adaptive_enabled: None,
+            batch_size: None,
+            batch_timeout_ms: None,
+            source_id: None,
         };
 
         let source_id = "test-source".to_string();
@@ -228,6 +241,10 @@ mod tests {
             endpoint: Some("/webhooks/changes".to_string()),
             timeout_seconds: Some(60),
             batch_events: Some(false),
+            adaptive_enabled: None,
+            batch_size: None,
+            batch_timeout_ms: None,
+            source_id: None,
         };
 
         let source_id = "test-source".to_string();
