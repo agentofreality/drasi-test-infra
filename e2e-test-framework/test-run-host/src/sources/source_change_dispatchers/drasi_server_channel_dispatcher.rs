@@ -371,24 +371,30 @@ async fn dispatch_event_to_drasi(
         })
         .unwrap_or_default();
 
-    // Determine type based on ID prefix or labels
-    // Building IDs start with "B_", Floor IDs with "F_", Room IDs with "R_"
-    // Relations have different patterns
-    let typ = if id.starts_with("B_") || labels.contains(&"Building".to_string()) {
-        "n" // Node
-    } else if id.starts_with("F_") || labels.contains(&"Floor".to_string()) {
-        "n" // Node
-    } else if id.starts_with("R_") || labels.contains(&"Room".to_string()) {
-        "n" // Node
-    } else if id.contains("HAS_FLOOR") || id.contains("HAS_ROOM") {
-        "r" // Relation
-    } else {
-        // Default to node if we can't determine
-        log::warn!(
-            "Could not determine type for element {}, defaulting to node",
-            id
-        );
-        "n"
+    // Determine type based on table field from source info or labels
+    let table = event.payload.source.table.as_str();
+    let typ = match table {
+        "node" => "n",
+        "relation" => "r",
+        _ => {
+            // Fallback: check ID patterns or labels
+            if id.starts_with("B_") || id.starts_with("F_") || id.starts_with("R_") 
+                || labels.contains(&"Building".to_string()) 
+                || labels.contains(&"Floor".to_string())
+                || labels.contains(&"Room".to_string())
+                || labels.contains(&"Stock".to_string()) {
+                "n" // Node
+            } else if id.contains("HAS_FLOOR") || id.contains("HAS_ROOM") {
+                "r" // Relation
+            } else {
+                // Default to node if we can't determine
+                log::debug!(
+                    "Using default type 'node' for element {} with labels {:?}",
+                    id, labels
+                );
+                "n"
+            }
+        }
     };
 
     // Convert the properties field to properties using PropertyMapBuilder

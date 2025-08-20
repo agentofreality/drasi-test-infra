@@ -31,21 +31,150 @@ use super::SourceChangeDispatcher;
 use log::{debug, error, info};
 use serde::{Deserialize, Serialize};
 
+/// Convert SourceChangeEvent to Direct Format HttpChangeEvent
+fn convert_to_direct_format(event: &SourceChangeEvent) -> Option<HttpChangeEvent> {
+    // Parse the payload to extract element data
+    let payload = serde_json::to_value(&event.payload).ok()?;
+    
+    // Determine operation type
+    let operation = match event.op.as_str() {
+        "i" => "insert",
+        "u" => "update",
+        "d" => "delete",
+        _ => {
+            error!("Unknown operation type: {}", event.op);
+            return None;
+        }
+    };
+    
+    // Get timestamp in nanoseconds
+    let timestamp = Some(event.reactivator_start_ns as i64);
+    
+    // For delete operations, we need to extract the ID from "before"
+    if operation == "delete" {
+        if let Some(before) = payload.get("before") {
+            if let Some(id) = before.get("id").and_then(|v| v.as_str()) {
+                let labels = before.get("labels")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect::<Vec<String>>());
+                
+                return Some(HttpChangeEvent {
+                    operation: operation.to_string(),
+                    element: None,
+                    id: Some(id.to_string()),
+                    labels,
+                    timestamp,
+                });
+            }
+        }
+        error!("Delete operation missing 'before' data");
+        return None;
+    }
+    
+    // For insert/update, extract element from "after"
+    let element_data = if operation == "update" || operation == "insert" {
+        payload.get("after")
+    } else {
+        None
+    };
+    
+    if let Some(elem_value) = element_data {
+        // Extract element fields
+        let id = elem_value.get("id")
+            .and_then(|v| v.as_str())
+            .map(String::from)?;
+        
+        let labels = elem_value.get("labels")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect::<Vec<String>>())
+            .unwrap_or_default();
+        
+        let properties = elem_value.get("properties")
+            .and_then(|v| v.as_object())
+            .cloned()
+            .unwrap_or_default();
+        
+        // Determine element type based on table in source info
+        let element_type = payload.get("source")
+            .and_then(|s| s.get("table"))
+            .and_then(|t| t.as_str())
+            .unwrap_or("node");
+        
+        let element_type = match element_type {
+            "relation" | "edge" => "relation",
+            _ => "node",
+        };
+        
+        // Check if it's a relation by looking for from/to fields
+        let from = elem_value.get("from")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        let to = elem_value.get("to")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        
+        let element = DirectElement {
+            element_type: if from.is_some() && to.is_some() { 
+                "relation".to_string() 
+            } else { 
+                element_type.to_string() 
+            },
+            id,
+            labels,
+            properties,
+            from,
+            to,
+        };
+        
+        Some(HttpChangeEvent {
+            operation: operation.to_string(),
+            element: Some(element),
+            id: None,
+            labels: None,
+            timestamp,
+        })
+    } else {
+        error!("Insert/Update operation missing 'after' data");
+        None
+    }
+}
+
 /// Batch event request that wraps multiple events
 #[derive(Debug, Serialize, Deserialize)]
 struct BatchEventRequest {
     events: Vec<HttpChangeEvent>,
 }
 
-/// HTTP change event format matching Drasi Server's expectation
+/// HTTP change event format matching Drasi Server's Direct Format
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct HttpChangeEvent {
-    op: String,
-    #[serde(rename = "reactivatorStart_ns", skip_serializing_if = "Option::is_none")]
-    reactivator_start_ns: Option<i64>,
-    #[serde(rename = "reactivatorEnd_ns", skip_serializing_if = "Option::is_none")]
-    reactivator_end_ns: Option<i64>,
-    payload: serde_json::Value,
+    operation: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    element: Option<DirectElement>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    labels: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    timestamp: Option<i64>,
+}
+
+/// Direct element format for Drasi Server
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct DirectElement {
+    #[serde(rename = "type")]
+    element_type: String,
+    id: String,
+    labels: Vec<String>,
+    properties: serde_json::Map<String, serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    from: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    to: Option<String>,
 }
 
 /// Response from the HTTP endpoint
@@ -177,28 +306,17 @@ impl AdaptiveHttpSourceChangeDispatcher {
                 
                 debug!("Adaptive HTTP batch ready with {} events", batch_size);
                 
-                // Convert events to HttpChangeEvent format
+                // Convert events to HttpChangeEvent Direct Format
                 let http_events: Vec<HttpChangeEvent> = batch.into_iter()
                     .filter_map(|event| {
-                        // Convert SourceChangeEvent to HttpChangeEvent
-                        // The payload already has the correct structure, just convert it to Value
-                        match serde_json::to_value(&event.payload) {
-                            Ok(payload_value) => {
-                                // Ensure the payload has the expected structure
-                                if payload_value.get("source").is_some() {
-                                    Some(HttpChangeEvent {
-                                        op: event.op,
-                                        reactivator_start_ns: Some(event.reactivator_start_ns as i64),
-                                        reactivator_end_ns: Some(event.reactivator_end_ns as i64),
-                                        payload: payload_value,
-                                    })
-                                } else {
-                                    error!("Payload missing 'source' field: {:?}", payload_value);
-                                    None
-                                }
+                        // Convert SourceChangeEvent to HttpChangeEvent Direct Format
+                        match convert_to_direct_format(&event) {
+                            Some(e) => {
+                                debug!("Converted event: op={} -> operation={}", event.op, e.operation);
+                                Some(e)
                             },
-                            Err(e) => {
-                                error!("Failed to serialize event payload: {}", e);
+                            None => {
+                                error!("Failed to convert event with op={}", event.op);
                                 None
                             }
                         }
@@ -206,6 +324,7 @@ impl AdaptiveHttpSourceChangeDispatcher {
                     .collect();
                 
                 if http_events.is_empty() {
+                    error!("No events were successfully converted to Direct Format");
                     continue;
                 }
                 
@@ -218,8 +337,8 @@ impl AdaptiveHttpSourceChangeDispatcher {
                     };
                     
                     // Log the batch being sent for debugging
-                    debug!("Sending batch to {}: {}", 
-                           batch_url,
+                    info!("Sending batch of {} events to {}", http_events.len(), batch_url);
+                    debug!("Batch request: {}", 
                            serde_json::to_string_pretty(&batch_request).unwrap_or_else(|_| "Failed to serialize".to_string()));
                     
                     match client.post(&batch_url)
@@ -295,15 +414,9 @@ impl AdaptiveHttpSourceChangeDispatcher {
     async fn send_single_event(&self, event: &SourceChangeEvent) -> anyhow::Result<()> {
         let url = format!("{}:{}{}", self.url, self.port, self.endpoint);
         
-        // Convert to HttpChangeEvent format
-        let payload = serde_json::to_value(&event.payload)?;
-        
-        let http_event = HttpChangeEvent {
-            op: event.op.clone(),
-            reactivator_start_ns: Some(event.reactivator_start_ns as i64),
-            reactivator_end_ns: Some(event.reactivator_end_ns as i64),
-            payload,
-        };
+        // Convert to HttpChangeEvent Direct Format
+        let http_event = convert_to_direct_format(event)
+            .ok_or_else(|| anyhow::anyhow!("Failed to convert event to Direct Format"))?;
         
         let response = self.client
             .post(&url)
