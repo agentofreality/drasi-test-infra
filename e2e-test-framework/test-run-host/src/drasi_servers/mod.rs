@@ -293,6 +293,7 @@ impl TestRunDrasiServer {
                         sources: q.sources.clone(),
                         auto_start: q.auto_start,
                         properties: q.properties.clone(),
+                        joins: None,
                     })
                     .collect();
 

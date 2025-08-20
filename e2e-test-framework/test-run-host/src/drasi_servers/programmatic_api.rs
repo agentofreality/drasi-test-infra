@@ -224,6 +224,7 @@ impl TestRunDrasiServer {
                 sources: request.sources,
                 auto_start: request.auto_start,
                 properties,
+                joins: None,
             };
 
             core.query_manager().add_query(config).await?;
@@ -257,6 +258,7 @@ impl TestRunDrasiServer {
                 sources: request.sources.unwrap_or(existing.sources),
                 auto_start: request.auto_start.unwrap_or(existing.auto_start),
                 properties,
+                joins: None,
             };
 
             core.query_manager()
