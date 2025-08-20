@@ -160,8 +160,8 @@ impl DrasiServerChannelHandler {
                                             });
 
                                             if let Err(e) = tx.send(result_json).await {
-                                                log::error!(
-                                                    "Failed to send query result through channel: {}",
+                                                log::debug!(
+                                                    "Channel closed (likely due to stop trigger): {}",
                                                     e
                                                 );
                                                 break;
@@ -176,8 +176,8 @@ impl DrasiServerChannelHandler {
                                                 });
 
                                                 if let Err(e) = tx.send(result_json).await {
-                                                    log::error!(
-                                                        "Failed to send query result through channel: {}",
+                                                    log::debug!(
+                                                        "Channel closed (likely due to stop trigger): {}",
                                                         e
                                                     );
                                                     break;
@@ -299,7 +299,7 @@ impl ReactionOutputHandler for DrasiServerChannelHandler {
 
                         // Send the message
                         if let Err(e) = tx_clone.send(message).await {
-                            log::error!("Failed to send reaction message: {}", e);
+                            log::debug!("Channel closed (likely due to stop trigger): {}", e);
                             break;
                         }
                     }
