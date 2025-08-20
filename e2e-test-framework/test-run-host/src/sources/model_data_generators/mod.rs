@@ -17,6 +17,7 @@ use std::collections::HashSet;
 use async_trait::async_trait;
 
 use building_hierarchy::BuildingHierarchyDataGenerator;
+use stock_trades::StockTradeDataGenerator;
 use test_data_store::{
     test_repo_storage::{
         models::{ModelDataGeneratorDefinition, SourceChangeDispatcherDefinition, SpacingMode},
@@ -32,6 +33,7 @@ use super::{
 
 pub mod building_hierarchy;
 pub mod domain_model_graph;
+pub mod stock_trades;
 
 #[async_trait]
 pub trait ModelDataGenerator:
@@ -103,6 +105,17 @@ pub async fn create_model_data_generator(
         None => Ok(None),
         Some(ModelDataGeneratorDefinition::BuildingHierarchy(definition)) => Ok(Some(Box::new(
             BuildingHierarchyDataGenerator::new(
+                id,
+                definition,
+                input_storage,
+                output_storage,
+                dispatchers,
+            )
+            .await?,
+        )
+            as Box<dyn ModelDataGenerator + Send + Sync>)),
+        Some(ModelDataGeneratorDefinition::StockTrade(definition)) => Ok(Some(Box::new(
+            StockTradeDataGenerator::new(
                 id,
                 definition,
                 input_storage,

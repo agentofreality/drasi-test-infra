@@ -281,6 +281,7 @@ pub struct ScriptBootstrapDataGeneratorDefinition {
 #[serde(tag = "kind")]
 pub enum ModelDataGeneratorDefinition {
     BuildingHierarchy(BuildingHierarchyDataGeneratorDefinition),
+    StockTrade(StockTradeDataGeneratorDefinition),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -304,6 +305,29 @@ pub struct BuildingHierarchyDataGeneratorDefinition {
     pub room_sensors: Vec<SensorDefinition>,
     #[serde(default)]
     pub send_initial_inserts: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StockTradeDataGeneratorDefinition {
+    #[serde(flatten)]
+    pub common: CommonModelDataGeneratorDefinition,
+    pub stock_definitions: Vec<StockDefinition>,
+    pub price_init: Option<(f64, f64)>,
+    pub price_change: Option<(f64, f64)>,
+    pub price_momentum: Option<(i32, f64, f64)>,
+    pub price_range: Option<(f64, f64)>,
+    pub volume_init: Option<(i64, f64)>,
+    pub volume_change: Option<(i64, f64)>,
+    pub volume_momentum: Option<(i32, f64, f64)>,
+    pub volume_range: Option<(i64, i64)>,
+    #[serde(default)]
+    pub send_initial_inserts: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StockDefinition {
+    pub symbol: String,
+    pub name: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

@@ -65,6 +65,14 @@ impl ModelTestRunSourceSettings {
                             mdg_def.common.time_mode = time_mode.clone();
                         }
                     }
+                    Some(ModelDataGeneratorDefinition::StockTrade(mdg_def)) => {
+                        if let Some(spacing_mode) = &mdg_overrides.spacing_mode {
+                            mdg_def.common.spacing_mode = spacing_mode.clone();
+                        }
+                        if let Some(time_mode) = &mdg_overrides.time_mode {
+                            mdg_def.common.time_mode = time_mode.clone();
+                        }
+                    }
                     None => {}
                 }
             }
